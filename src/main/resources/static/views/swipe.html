@@ -1,0 +1,44 @@
+<!-- Giao diện quẹt thẻ test: dùng cho cả Admin và User. -->
+<section id="swipePanel" class="panel active-panel">
+  <div class="card">
+    <div class="section-header">
+      <div>
+        <h2>Quẹt thẻ test</h2>
+        <p>User chỉ bấm nút để test thẻ của chính mình. Admin nhập cardId trước khi bấm.</p>
+      </div>
+    </div>
+
+    <!-- Admin nhập cardId thủ công để test thẻ bất kỳ. -->
+    <div id="adminSwipeBox" class="form-group admin-only">
+      <label for="swipeCardId">Card ID cần test</label>
+      <input id="swipeCardId" type="text" placeholder="Ví dụ: CARD-AB12CD34" />
+    </div>
+
+    <!-- User chỉ nhìn thấy cardId lấy từ token đăng nhập. -->
+    <div id="userSwipeBox" class="info-box user-only">
+      <span>Mã thẻ đang dùng:</span>
+      <strong id="userSwipeCardId">-</strong>
+    </div>
+
+    <button id="swipeButton" type="button" class="btn btn-success">Bấm để test quẹt thẻ</button>
+    <p id="swipeMessage" class="message"></p>
+
+    <!-- Bảng kết quả sau mỗi lần test quẹt thẻ. -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã thẻ</th>
+            <th>Hành động</th>
+            <th>Thời gian gửi</th>
+            <th>Số tiền</th>
+            <th>Thông báo</th>
+          </tr>
+        </thead>
+        <tbody id="swipeResultBody">
+          <tr><td colspan="5" class="empty-row">Chưa có kết quả test.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

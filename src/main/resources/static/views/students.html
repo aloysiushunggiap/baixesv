@@ -1,0 +1,148 @@
+<!-- Giao diện quản lý sinh viên/thẻ và tài khoản admin: chỉ dành cho Admin. -->
+<section id="studentPanel" class="panel active-panel admin-only">
+  <div class="grid two-columns">
+    <!-- Khối đăng ký sinh viên mới. Backend tự sinh cardId. -->
+    <div class="card">
+      <h2>Đăng ký sinh viên</h2>
+      <p class="section-note">Form này gọi API đăng ký user sinh viên và backend tự sinh cardId.</p>
+
+      <div class="form-stack">
+        <div class="form-group">
+          <label for="studentId">Mã sinh viên</label>
+          <input id="studentId" type="text" maxlength="8" placeholder="8 chữ số" />
+        </div>
+
+        <div class="form-group">
+          <label for="studentName">Họ tên</label>
+          <input id="studentName" type="text" placeholder="Nguyễn Văn A" />
+        </div>
+
+        <div class="form-group">
+          <label for="studentLicensePlate">Biển số xe</label>
+          <input id="studentLicensePlate" type="text" placeholder="59A1-12345" />
+        </div>
+
+        <div class="form-group">
+          <label for="studentUsername">Username</label>
+          <input id="studentUsername" type="text" placeholder="username sinh viên" />
+        </div>
+
+        <div class="form-group">
+          <label for="studentPassword">Password</label>
+          <input id="studentPassword" type="password" placeholder="Mật khẩu" />
+        </div>
+
+        <button id="registerStudentButton" type="button" class="btn btn-success">Đăng ký sinh viên</button>
+        <p id="studentMessage" class="message"></p>
+      </div>
+    </div>
+
+    <!-- Khối xóa thẻ sinh viên. -->
+    <div class="card">
+      <h2>Xóa thẻ sinh viên</h2>
+      <p class="section-note">Chỉ xóa được khi xe không còn trong bãi.</p>
+
+      <div class="form-group">
+        <label for="deleteCardId">Card ID cần xóa</label>
+        <input id="deleteCardId" type="text" placeholder="Ví dụ: CARD-AB12CD34" />
+      </div>
+
+      <button id="deleteCardButton" type="button" class="btn btn-danger">Xóa thẻ</button>
+      <p id="deleteCardMessage" class="message"></p>
+
+      <!-- Hiển thị thông tin sinh viên vừa đăng ký. -->
+      <div id="newStudentResult" class="result-box hidden"></div>
+    </div>
+
+    <!-- Khối đăng ký tài khoản admin mới. -->
+    <div class="card">
+      <h2>Đăng ký admin</h2>
+      <p class="section-note">Chỉ admin đang đăng nhập mới được tạo thêm tài khoản admin.</p>
+
+      <div class="form-stack">
+        <div class="form-group">
+          <label for="adminUsername">Username admin</label>
+          <input id="adminUsername" type="text" placeholder="username admin mới" />
+        </div>
+
+        <div class="form-group">
+          <label for="adminPassword">Password</label>
+          <input id="adminPassword" type="password" placeholder="Mật khẩu admin mới" />
+        </div>
+
+        <div class="form-group">
+          <label for="adminPasswordConfirm">Nhập lại password</label>
+          <input id="adminPasswordConfirm" type="password" placeholder="Nhập lại mật khẩu" />
+        </div>
+
+        <button id="registerAdminButton" type="button" class="btn btn-success">Đăng ký admin</button>
+        <p id="adminRegisterMessage" class="message"></p>
+        <div id="newAdminResult" class="result-box hidden"></div>
+      </div>
+    </div>
+
+    <!-- Khối xóa tài khoản admin. -->
+    <div class="card">
+      <h2>Xóa tài khoản admin</h2>
+      <p class="section-note">Không cho phép tự xóa tài khoản admin đang đăng nhập hoặc xóa admin cuối cùng.</p>
+
+      <div class="form-group">
+        <label for="deleteAdminUsername">Username admin cần xóa</label>
+        <input id="deleteAdminUsername" type="text" placeholder="username admin cần xóa" />
+      </div>
+
+      <button id="deleteAdminButton" type="button" class="btn btn-danger">Xóa admin</button>
+      <p id="deleteAdminMessage" class="message"></p>
+    </div>
+  </div>
+</section>
+
+<!-- Giao diện yêu cầu quên mật khẩu: chỉ dành cho Admin. -->
+<section id="requestsPanel" class="panel active-panel admin-only">
+  <div class="card">
+    <div class="section-header">
+      <div>
+        <h2>Yêu cầu quên mật khẩu</h2>
+        <p>Admin kiểm tra thông tin sinh viên rồi chọn Đồng ý hoặc Từ chối. Chỉ khi Đồng ý thì mật khẩu mới được cập nhật.</p>
+      </div>
+      <button id="loadPasswordRequestsButton" type="button" class="btn btn-primary">Tải yêu cầu</button>
+    </div>
+
+    <div class="grid form-grid">
+      <div class="form-group">
+        <label for="passwordRequestStatusFilter">Trạng thái</label>
+        <select id="passwordRequestStatusFilter">
+          <option value="PENDING">Đang chờ duyệt</option>
+          <option value="APPROVED">Đã đồng ý</option>
+          <option value="REJECTED">Đã từ chối</option>
+          <option value="ALL">Tất cả</option>
+        </select>
+      </div>
+    </div>
+
+    <p id="passwordRequestsMessage" class="message"></p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Mã sinh viên</th>
+            <th>Họ tên</th>
+            <th>Biển số xe</th>
+            <th>Username</th>
+            <th>Trạng thái</th>
+            <th>Thời gian gửi</th>
+            <th>Người xử lý</th>
+            <th>Thời gian xử lý</th>
+            <th>Lý do từ chối</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="passwordRequestsBody">
+          <tr><td colspan="11" class="empty-row">Bấm “Tải yêu cầu” để xem danh sách.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

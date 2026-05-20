@@ -1,0 +1,40 @@
+<!-- Giao diện mô phỏng tính phí: chỉ dành cho Admin. -->
+<section id="simulatePanel" class="panel active-panel admin-only">
+  <div class="card">
+    <h2>Mô phỏng tính phí</h2>
+    <p class="section-note">Test chức năng tính phí theo ngày giờ khác nhau.</p>
+
+    <!-- Chọn mốc thời gian vào/ra để backend tính số phút và số tiền. -->
+    <div class="grid form-grid">
+      <div class="form-group">
+        <label for="checkInTime">Thời gian vào</label>
+        <input id="checkInTime" type="datetime-local" />
+      </div>
+
+      <div class="form-group">
+        <label for="checkOutTime">Thời gian ra</label>
+        <input id="checkOutTime" type="datetime-local" />
+      </div>
+    </div>
+
+    <button id="simulateButton" type="button" class="btn btn-primary">Tính phí</button>
+    <p id="simulateMessage" class="message"></p>
+
+    <!-- Kết quả mô phỏng được ghi vào bảng này. -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Thời gian vào</th>
+            <th>Thời gian ra</th>
+            <th>Số phút</th>
+            <th>Số tiền</th>
+          </tr>
+        </thead>
+        <tbody id="simulateBody">
+          <tr><td colspan="4" class="empty-row">Chưa có kết quả mô phỏng.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

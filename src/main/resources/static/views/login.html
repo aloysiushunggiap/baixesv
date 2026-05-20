@@ -1,0 +1,71 @@
+<!-- Giao diện đăng nhập. Form quên mật khẩu chỉ hiện sau khi bấm nút "Quên mật khẩu?". -->
+<div class="login-card">
+  <div class="brand-block">
+    <div class="brand-icon">P</div>
+    <div>
+      <h1>Quản lý bãi xe SV</h1>
+      <p>Đăng nhập để sử dụng</p>
+    </div>
+  </div>
+
+  <!-- Form đăng nhập: submit sẽ được bắt bằng JavaScript, không reload trang. -->
+  <form id="loginForm" class="form-stack">
+    <div class="form-group">
+      <label for="username">Tên đăng nhập</label>
+      <input id="username" type="text" autocomplete="username" placeholder="Ví dụ: admin" required />
+    </div>
+
+    <div class="form-group">
+      <label for="password">Mật khẩu</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required />
+    </div>
+
+    <button id="loginButton" type="submit" class="btn btn-primary full-width">Đăng nhập</button>
+
+    <!-- Chỉ hiện nút quên mật khẩu ở màn hình đăng nhập. Khi bấm mới mở form bên dưới. -->
+    <button id="showForgotPasswordButton" type="button" class="btn btn-outline full-width">Quên mật khẩu?</button>
+
+    <p id="loginMessage" class="message"></p>
+  </form>
+
+  <!-- Form quên mật khẩu: mặc định ẩn, chỉ hiện sau khi bấm nút Quên mật khẩu. -->
+  <div id="forgotPasswordBox" class="forgot-password-box hidden">
+    <div class="section-header">
+      <div>
+        <h2>Quên mật khẩu?</h2>
+        <p>Nhập đúng thông tin sinh viên và mật khẩu mới. Yêu cầu sẽ được gửi cho admin phê duyệt.</p>
+      </div>
+    </div>
+
+    <form id="forgotPasswordForm" class="form-stack">
+      <div class="form-group">
+        <label for="forgotFullName">Họ tên</label>
+        <input id="forgotFullName" type="text" autocomplete="name" placeholder="Nguyễn Văn A" required />
+      </div>
+
+      <div class="form-group">
+        <label for="forgotStudentId">Mã sinh viên</label>
+        <input id="forgotStudentId" type="text" maxlength="8" inputmode="numeric" placeholder="8 chữ số" required />
+      </div>
+
+      <div class="form-group">
+        <label for="forgotLicensePlate">Biển số xe</label>
+        <input id="forgotLicensePlate" type="text" placeholder="Ví dụ: 59A1-12345" required />
+      </div>
+
+      <div class="form-group">
+        <label for="forgotNewPassword">Mật khẩu mới</label>
+        <input id="forgotNewPassword" type="password" autocomplete="new-password" placeholder="Ít nhất 6 ký tự, không có dấu cách" required />
+      </div>
+
+      <div class="form-group">
+        <label for="forgotConfirmPassword">Nhập lại mật khẩu mới</label>
+        <input id="forgotConfirmPassword" type="password" autocomplete="new-password" placeholder="Nhập lại mật khẩu mới" required />
+      </div>
+
+      <button id="sendForgotPasswordButton" type="submit" class="btn btn-primary full-width">Gửi yêu cầu cho admin</button>
+      <button id="backToLoginButton" type="button" class="btn btn-outline full-width">Quay lại đăng nhập</button>
+      <p id="forgotPasswordMessage" class="message"></p>
+    </form>
+  </div>
+</div>

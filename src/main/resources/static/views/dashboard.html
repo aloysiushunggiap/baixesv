@@ -1,0 +1,33 @@
+<!-- Giao diện tổng quan: hiển thị thông tin tài khoản hiện tại. -->
+<section id="dashboardPanel" class="panel active-panel">
+  <div class="grid cards-grid">
+    <article class="card">
+      <span class="card-label">Tài khoản</span>
+      <h2 id="dashboardUsername">-</h2>
+      <p>Người dùng đang đăng nhập vào hệ thống.</p>
+    </article>
+
+    <article class="card">
+      <span class="card-label">Vai trò</span>
+      <h2 id="dashboardRole">-</h2>
+      <p>Giao diện tự ẩn/hiện chức năng theo quyền này.</p>
+    </article>
+
+    <!-- Chỉ user sinh viên mới có cardId cá nhân trong token. -->
+    <article class="card user-only">
+      <span class="card-label">Mã thẻ của tôi</span>
+      <h2 id="dashboardCardId">-</h2>
+      <p>User dùng mã thẻ này khi bấm nút quẹt test.</p>
+    </article>
+  </div>
+
+  <div class="card">
+    <h2>Hướng dẫn nhanh</h2>
+    <ul class="help-list">
+      <li><strong>User:</strong> xem bảng giá, xem lịch sử của mình, bấm nút quẹt thẻ test, tự đổi mật khẩu hoặc gửi yêu cầu quên mật khẩu ở màn đăng nhập.</li>
+      <li><strong>Admin:</strong> nhập cardId để quẹt test không ghi lịch sử, quản lý bảng giá, mô phỏng phí, xem lịch sử theo cardId, đăng ký/xóa sinh viên hoặc admin, reset mật khẩu mọi tài khoản.</li>
+      <li><strong>Yêu cầu:</strong> admin xem các yêu cầu quên mật khẩu và chọn Đồng ý hoặc Từ chối.</li>
+      <li><strong>Bảo mật:</strong> tài khoản sẽ tự đăng xuất sau 5 phút không thao tác; khi mật khẩu đổi thành công, các phiên đăng nhập cũ sẽ bị đăng xuất.</li>
+    </ul>
+  </div>
+</section>

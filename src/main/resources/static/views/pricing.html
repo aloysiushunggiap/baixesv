@@ -1,0 +1,82 @@
+<!-- Giao diện bảng giá: Admin quản lý, User chỉ xem. -->
+<section id="pricingPanel" class="panel active-panel">
+  <!-- Form thêm/sửa khung giá, chỉ hiển thị với Admin. -->
+  <div class="card admin-only">
+    <div class="section-header">
+      <div>
+        <h2 id="pricingFormTitle">Thêm khung giá</h2>
+
+      </div>
+      <button id="resetPricingButton" type="button" class="btn btn-light">Làm mới form</button>
+    </div>
+
+    <!-- Có id nghĩa là đang sửa; rỗng nghĩa là đang thêm mới. -->
+    <input id="priceRuleId" type="hidden" />
+
+    <div class="grid form-grid">
+      <div class="form-group">
+        <label for="priceStartTime">Giờ bắt đầu</label>
+        <input id="priceStartTime" type="time" />
+      </div>
+
+      <div class="form-group">
+        <label for="priceEndTime">Giờ kết thúc</label>
+        <input id="priceEndTime" type="time" />
+      </div>
+
+      <div class="form-group">
+        <label for="pricePerHour">Giá mỗi giờ</label>
+        <input id="pricePerHour" type="number" min="0" placeholder="Ví dụ: 3000" />
+      </div>
+
+      <label class="check-card">
+        <input id="priceWeekday" type="checkbox" />
+        <span>Áp dụng ngày thường</span>
+      </label>
+
+      <label class="check-card">
+        <input id="priceWeekend" type="checkbox" />
+        <span>Áp dụng cuối tuần</span>
+      </label>
+
+      <label class="check-card">
+        <input id="priceActive" type="checkbox" checked />
+        <span>Đang áp dụng</span>
+      </label>
+    </div>
+
+    <button id="savePricingButton" type="button" class="btn btn-primary">Lưu khung giá</button>
+    <p id="pricingMessage" class="message"></p>
+  </div>
+
+  <!-- Danh sách bảng giá dùng chung cho User và Admin. -->
+  <div class="card">
+    <div class="section-header">
+      <div>
+        <h2>Danh sách bảng giá</h2>
+        <p>Bảng giá gửi xe mới nhất.</p>
+      </div>
+      <button id="loadPricingButton" type="button" class="btn btn-primary">Làm mới bảng giá</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Bắt đầu</th>
+            <th>Kết thúc</th>
+            <th>Giá/giờ</th>
+            <th>Ngày thường</th>
+            <th>Cuối tuần</th>
+            <th>Trạng thái</th>
+            <th class="admin-only-table">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="pricingBody">
+          <tr><td colspan="8" class="empty-row">Bấm “Làm mới bảng giá” để xem dữ liệu.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

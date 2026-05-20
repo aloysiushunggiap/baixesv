@@ -1,0 +1,44 @@
+<!-- Giao diện lịch sử gửi xe theo tháng. -->
+<section id="historyPanel" class="panel active-panel">
+  <div class="card">
+    <div class="section-header">
+      <div>
+        <h2>Lịch sử gửi xe theo tháng</h2>
+        <p>User xem lịch sử của mình. Admin nhập cardId để xem lịch sử thẻ bất kỳ.</p>
+      </div>
+    </div>
+
+    <!-- Admin nhập thẻ cần xem lịch sử. -->
+    <div class="form-group admin-only">
+      <label for="historyCardId">Card ID cần xem</label>
+      <input id="historyCardId" type="text" placeholder="Ví dụ: CARD-AB12CD34" />
+    </div>
+
+    <!-- User chỉ xem lịch sử của cardId trong token. -->
+    <div class="info-box user-only">
+      <span>Lịch sử của thẻ:</span>
+      <strong id="historyUserCardId">-</strong>
+    </div>
+
+    <button id="loadHistoryButton" type="button" class="btn btn-primary">Xem lịch sử</button>
+    <p id="historyMessage" class="message"></p>
+
+    <!-- Bảng lịch sử tổng hợp theo tháng. -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã thẻ</th>
+            <th>Tháng</th>
+            <th>Năm</th>
+            <th>Tổng phút gửi</th>
+            <th>Tổng tiền</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="5" class="empty-row">Chưa có dữ liệu lịch sử.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

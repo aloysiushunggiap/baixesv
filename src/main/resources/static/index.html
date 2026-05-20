@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản lý bãi xe sinh viên</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Toast dùng chung để hiện thông báo nhanh ở góc màn hình. -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Login được tách ra file /views/login.html và được nạp vào vùng này. -->
+  <section id="loginView" class="login-view"></section>
+
+  <!-- Khung chính của ứng dụng. Nội dung từng giao diện được nạp vào #panelHost. -->
+  <section id="appView" class="app-view hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">P</div>
+        <div>
+          <h2>Bãi xe SV</h2>
+          <p id="sidebarRole">ROLE</p>
+        </div>
+      </div>
+
+      <!-- Mỗi nút menu khai báo panel cần mở qua data-panel. -->
+      <nav class="nav-menu">
+        <button class="nav-item active" data-panel="dashboardPanel">Tổng quan</button>
+        <button class="nav-item" data-panel="swipePanel">Quẹt thẻ test</button>
+        <button class="nav-item" data-panel="pricingPanel">Bảng giá</button>
+        <button class="nav-item admin-only" data-panel="simulatePanel">Mô phỏng phí</button>
+        <button class="nav-item" data-panel="historyPanel">Lịch sử</button>
+        <button class="nav-item admin-only" data-panel="studentPanel">Sinh viên / thẻ</button>
+        <button class="nav-item admin-only" data-panel="requestsPanel">Yêu cầu</button>
+        <button class="nav-item" data-panel="accountPanel">Đổi mật khẩu</button>
+      </nav>
+
+      <button id="logoutButton" type="button" class="btn btn-outline full-width">Đăng xuất</button>
+      <p class="section-note">Hệ thống tự đăng xuất nếu không thao tác trong 5 phút.</p>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Tổng quan</h1>
+          <p id="welcomeText">Xin chào</p>
+        </div>
+        <div class="user-pill">
+          <span id="currentUsername"></span>
+          <strong id="currentRole"></strong>
+        </div>
+      </header>
+
+      <!-- Vùng hiển thị giao diện con: dashboard, bảng giá, lịch sử, sinh viên... -->
+      <div id="panelHost"></div>
+    </main>
+  </section>
+
+  <!-- Tách JS theo từng nhóm chức năng để dễ kiểm soát. -->
+  <script src="/js/config.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/layout.js"></script>
+  <script src="/js/dashboard.js"></script>
+  <script src="/js/swipe.js"></script>
+  <script src="/js/pricing.js"></script>
+  <script src="/js/simulate.js"></script>
+  <script src="/js/history.js"></script>
+  <script src="/js/students.js"></script>
+  <script src="/js/account.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
