@@ -11,7 +11,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
@@ -32,10 +37,11 @@ public class AccountController {
     private LoginSessionService loginSessionService;
 
     @PutMapping("/change-password")
+    @Transactional
     public ChangePasswordResponseDto changePassword(@RequestBody ChangePasswordRequestDto request,
                                                     Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new RuntimeException("Ban chua dang nhap.");
+            throw new RuntimeException("Bạn chưa đăng nhập.");
         }
 
         validateChangePasswordInput(request);
@@ -51,7 +57,7 @@ public class AccountController {
             return changeOwnUserPassword(request, authentication.getName());
         }
 
-        throw new RuntimeException("Vai tro tai khoan khong hop le.");
+        throw new RuntimeException("Vai trò tài khoản không hợp lệ.");
     }
 
     @DeleteMapping("/admin/{username}")
@@ -59,51 +65,51 @@ public class AccountController {
     public Map<String, Object> deleteAdminAccount(@PathVariable String username,
                                                   Authentication authentication) {
         if (!hasRole(authentication, "ROLE_ADMIN")) {
-            throw new RuntimeException("Chi admin duoc xoa tai khoan admin.");
+            throw new RuntimeException("Chỉ admin được xóa tài khoản admin.");
         }
 
         if (username == null || username.isBlank()) {
-            throw new RuntimeException("username admin can xoa khong duoc de trong.");
+            throw new RuntimeException("username admin cần xóa không được để trống.");
         }
 
         String targetUsername = username.trim();
         String loggedInUsername = authentication.getName();
 
         if (targetUsername.equals(loggedInUsername)) {
-            throw new RuntimeException("Ban khong the tu xoa tai khoan admin dang dang nhap.");
+            throw new RuntimeException("Bạn không thể tự xóa tài khoản admin đang đăng nhập.");
         }
 
         if (adminRepo.count() <= 1) {
-            throw new RuntimeException("Khong the xoa vi he thong phai con it nhat mot tai khoan admin.");
+            throw new RuntimeException("Không thể xóa vì hệ thống phải còn ít nhất một tài khoản admin.");
         }
 
         AdminAccount admin = adminRepo.findByUsername(targetUsername)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay tai khoan admin: " + targetUsername));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản admin: " + targetUsername));
 
         adminRepo.delete(admin);
         loginSessionService.deactivateAllSessions(targetUsername);
 
         return Map.of(
-                "message", "Da xoa tai khoan admin thanh cong.",
+                "message", "Đã xóa tài khoản admin thành công.",
                 "username", targetUsername
         );
     }
 
     private void validateChangePasswordInput(ChangePasswordRequestDto request) {
         if (request.getUsername() == null || request.getUsername().isBlank()) {
-            throw new RuntimeException("username khong duoc de trong.");
+            throw new RuntimeException("username không được để trống.");
         }
 
         if (request.getNewPassword() == null || request.getNewPassword().isBlank()) {
-            throw new RuntimeException("mat khau moi khong duoc de trong.");
+            throw new RuntimeException("mật khẩu mới không được để trống.");
         }
 
         if (request.getNewPassword().length() < 6) {
-            throw new RuntimeException("mat khau moi phai co it nhat 6 ky tu.");
+            throw new RuntimeException("mật khẩu mới phải có ít nhất 6 ký tự.");
         }
 
         if (request.getNewPassword().contains(" ")) {
-            throw new RuntimeException("mat khau moi khong nen co dau cach.");
+            throw new RuntimeException("mật khẩu mới không nên có dấu cách.");
         }
     }
 
@@ -113,7 +119,7 @@ public class AccountController {
         AdminAccount admin = adminRepo.findByUsername(targetUsername).orElse(null);
         if (admin != null) {
             if (!admin.isEnabled()) {
-                throw new RuntimeException("Tai khoan admin dang bi khoa.");
+                throw new RuntimeException("Tài khoản admin đang bị khóa.");
             }
 
             admin.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -122,17 +128,17 @@ public class AccountController {
             loginSessionService.deactivateAllSessions(admin.getUsername());
 
             return new ChangePasswordResponseDto(
-                    "Admin da doi mat khau tai khoan admin thanh cong. Tat ca phien dang nhap cu da bi huy.",
+                    "Admin đã đổi mật khẩu tài khoản admin thành công. Tất cả phiên đăng nhập cũ đã bị hủy.",
                     admin.getUsername(),
                     null
             );
         }
 
         Student student = studentRepo.findByUsername(targetUsername)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay tai khoan can doi mat khau: " + targetUsername));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản cần đổi mật khẩu: " + targetUsername));
 
         if (!student.isEnabled()) {
-            throw new RuntimeException("Tai khoan user dang bi khoa.");
+            throw new RuntimeException("Tài khoản user đang bị khóa.");
         }
 
         student.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -141,7 +147,7 @@ public class AccountController {
         loginSessionService.deactivateAllSessions(student.getUsername());
 
         return new ChangePasswordResponseDto(
-                "Admin da doi mat khau tai khoan user thanh cong. Tat ca phien dang nhap cu da bi huy.",
+                "Admin đã đổi mật khẩu tài khoản user thành công. Tất cả phiên đăng nhập cũ đã bị hủy.",
                 student.getUsername(),
                 null
         );
@@ -151,22 +157,22 @@ public class AccountController {
         String targetUsername = request.getUsername().trim();
 
         if (!loggedInUsername.equals(targetUsername)) {
-            throw new RuntimeException("Ban chi duoc doi mat khau cua chinh tai khoan dang dang nhap.");
+            throw new RuntimeException("Bạn chỉ được đổi mật khẩu của chính tài khoản đang đăng nhập.");
         }
 
         if (request.getOldPassword() == null || request.getOldPassword().isBlank()) {
-            throw new RuntimeException("mat khau cu khong duoc de trong.");
+            throw new RuntimeException("mật khẩu cũ không được để trống.");
         }
 
         Student student = studentRepo.findByUsername(targetUsername)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay tai khoan user."));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản user."));
 
         if (!student.isEnabled()) {
-            throw new RuntimeException("Tai khoan user dang bi khoa.");
+            throw new RuntimeException("Tài khoản user đang bị khóa.");
         }
 
         if (!passwordEncoder.matches(request.getOldPassword(), student.getPassword())) {
-            throw new RuntimeException("Mat khau cu khong dung.");
+            throw new RuntimeException("Mật khẩu cũ không đúng.");
         }
 
         student.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -175,7 +181,7 @@ public class AccountController {
         loginSessionService.deactivateAllSessions(student.getUsername());
 
         return new ChangePasswordResponseDto(
-                "Doi mat khau user thanh cong. Tat ca phien dang nhap cu da bi huy.",
+                "Đổi mật khẩu user thành công. Tất cả phiên đăng nhập cũ đã bị hủy.",
                 student.getUsername(),
                 null
         );

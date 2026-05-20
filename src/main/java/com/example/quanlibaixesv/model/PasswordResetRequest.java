@@ -1,6 +1,13 @@
 package com.example.quanlibaixesv.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -26,7 +33,7 @@ public class PasswordResetRequest {
     @Column(nullable = false)
     private String username;
 
-    // Khong luu mat khau moi dang ro. Chi luu password da encode.
+    // Không lưu mật khẩu mới dạng rõ, chỉ lưu password đã encode.
     @Column(nullable = false, length = 255)
     private String newPasswordHash;
 
@@ -38,8 +45,6 @@ public class PasswordResetRequest {
     private LocalDateTime requestedAt;
 
     private LocalDateTime processedAt;
-
     private String processedBy;
-
     private String rejectReason;
 }

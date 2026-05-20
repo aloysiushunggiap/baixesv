@@ -54,12 +54,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
 
-                        // User quen mat khau khong can dang nhap.
+                        // User quên mật khẩu không cần đăng nhập.
                         .requestMatchers(HttpMethod.POST, "/api/password-reset/request").permitAll()
 
-                        // Admin xem va xu ly muc "Yeu cau".
+                        // Admin xem và xử lý mục "Yêu cầu".
                         .requestMatchers(HttpMethod.GET, "/api/password-reset/admin/requests").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/password-reset/admin/requests/**").hasRole("ADMIN")
+
+                        // Admin quản lý danh sách session/token còn hạn.
+                        .requestMatchers(HttpMethod.GET, "/api/sessions/active").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/sessions/**").hasRole("ADMIN")
 
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/account/change-password").hasAnyRole("USER", "ADMIN")

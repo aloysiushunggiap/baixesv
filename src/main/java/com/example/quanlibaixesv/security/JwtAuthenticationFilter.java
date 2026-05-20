@@ -44,7 +44,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-
         final String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || authHeader.isBlank()) {
@@ -53,13 +52,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         if (!authHeader.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            writeUnauthorizedResponse(response, "Authorization header khong dung dinh dang Bearer token.");
+            writeUnauthorizedResponse(response, "Authorization header không đúng định dạng Bearer token.");
             return;
         }
 
         String jwt = authHeader.substring(7).trim();
         if (jwt.isBlank()) {
-            writeUnauthorizedResponse(response, "Token khong duoc de trong.");
+            writeUnauthorizedResponse(response, "Token không được để trống.");
             return;
         }
 
@@ -70,31 +69,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
                 long currentTokenVersion = findCurrentTokenVersion(username);
 
-                if (jwtService.isTokenValid(jwt, userDetails, currentTokenVersion)) {
-                    long tokenVersion = jwtService.extractTokenVersion(jwt);
-                    String sessionId = jwtService.extractSessionId(jwt);
-                    loginSessionService.validateAndTouch(sessionId, username, tokenVersion);
-
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities()
-                            );
-
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                } else {
-                    throw new InvalidSessionException("Token khong con hop le, vui long dang nhap lai.");
+                if (!jwtService.isTokenValid(jwt, userDetails, currentTokenVersion)) {
+                    throw new InvalidSessionException("Token không còn hợp lệ, vui lòng đăng nhập lại.");
                 }
+
+                long tokenVersion = jwtService.extractTokenVersion(jwt);
+                String sessionId = jwtService.extractSessionId(jwt);
+
+                // JWT exp quyết định thời gian phiên. SessionId chỉ kiểm tra token có còn được quản lý/cho phép hay không.
+                loginSessionService.validateSession(sessionId, username, tokenVersion);
+
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
             }
+
+            filterChain.doFilter(request, response);
         } catch (JwtException | IllegalArgumentException | UsernameNotFoundException | InvalidSessionException ex) {
             SecurityContextHolder.clearContext();
-            writeUnauthorizedResponse(response, "Token khong hop le, da het han hoac phien dang nhap da qua 5 phut khong thao tac.");
-            return;
+            writeUnauthorizedResponse(response, "Token không hợp lệ, đã hết hạn hoặc phiên đăng nhập đã bị hủy.");
         }
-
-        filterChain.doFilter(request, response);
     }
 
     private long findCurrentTokenVersion(String username) {
@@ -104,7 +104,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         Student student = studentRepo.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Khong tim thay tai khoan"));
+                .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy tài khoản"));
         return student.getTokenVersion();
     }
 

@@ -38,6 +38,7 @@ public class PasswordResetService {
         validateCreateInput(dto);
 
         String studentId = dto.getStudentId().trim();
+
         Student student = studentRepo.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Thông tin sinh viên chưa chính xác"));
 
@@ -81,14 +82,14 @@ public class PasswordResetService {
     @Transactional
     public PasswordResetResponseDto decide(Long id, PasswordResetDecisionDto dto, String adminUsername) {
         if (dto == null || dto.getApproved() == null) {
-            throw new RuntimeException("Lua chon approved khong duoc de trong.");
+            throw new RuntimeException("Lựa chọn approved không được để trống.");
         }
 
         PasswordResetRequest request = resetRequestRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Khong tim thay yeu cau quen mat khau id = " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy yêu cầu quên mật khẩu id = " + id));
 
         if (request.getStatus() != PasswordResetStatus.PENDING) {
-            throw new RuntimeException("Yeu cau nay da duoc xu ly truoc do.");
+            throw new RuntimeException("Yêu cầu này đã được xử lý trước đó.");
         }
 
         request.setProcessedAt(LocalDateTime.now());
@@ -96,17 +97,16 @@ public class PasswordResetService {
 
         if (dto.getApproved()) {
             Student student = studentRepo.findById(request.getStudentId())
-                    .orElseThrow(() -> new RuntimeException("Khong tim thay sinh vien can reset mat khau."));
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy sinh viên cần reset mật khẩu."));
 
             student.setPassword(request.getNewPasswordHash());
             student.setTokenVersion(student.getTokenVersion() + 1);
             studentRepo.save(student);
-
             loginSessionService.deactivateAllSessions(student.getUsername());
 
             request.setStatus(PasswordResetStatus.APPROVED);
             PasswordResetRequest saved = resetRequestRepo.save(request);
-            return PasswordResetResponseDto.fromEntity("Admin da phe duyet. Mat khau moi da co hieu luc.", saved);
+            return PasswordResetResponseDto.fromEntity("Admin đã phê duyệt. Mật khẩu mới đã có hiệu lực.", saved);
         }
 
         request.setStatus(PasswordResetStatus.REJECTED);
@@ -117,25 +117,25 @@ public class PasswordResetService {
 
     private void validateCreateInput(ForgotPasswordRequestDto dto) {
         if (dto == null) {
-            throw new RuntimeException("Du lieu yeu cau khong duoc de trong.");
+            throw new RuntimeException("Dữ liệu yêu cầu không được để trống.");
         }
         if (isBlank(dto.getName())) {
-            throw new RuntimeException("Ho ten khong duoc de trong.");
+            throw new RuntimeException("Họ tên không được để trống.");
         }
         if (isBlank(dto.getStudentId())) {
-            throw new RuntimeException("Ma sinh vien khong duoc de trong.");
+            throw new RuntimeException("Mã sinh viên không được để trống.");
         }
         if (isBlank(dto.getLicensePlate())) {
-            throw new RuntimeException("Bien so xe khong duoc de trong.");
+            throw new RuntimeException("Biển số xe không được để trống.");
         }
         if (isBlank(dto.getNewPassword())) {
-            throw new RuntimeException("Mat khau moi khong duoc de trong.");
+            throw new RuntimeException("Mật khẩu mới không được để trống.");
         }
         if (dto.getNewPassword().length() < 6) {
-            throw new RuntimeException("Mat khau moi phai co it nhat 6 ky tu.");
+            throw new RuntimeException("Mật khẩu mới phải có ít nhất 6 ký tự.");
         }
         if (dto.getNewPassword().contains(" ")) {
-            throw new RuntimeException("Mat khau moi khong nen co dau cach.");
+            throw new RuntimeException("Mật khẩu mới không nên có dấu cách.");
         }
     }
 

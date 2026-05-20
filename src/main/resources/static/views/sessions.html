@@ -1,0 +1,33 @@
+<!-- Giao diện quản lý phiên đăng nhập còn hạn: chỉ dành cho Admin. -->
+<section id="sessionsPanel" class="panel active-panel admin-only">
+  <div class="card">
+    <div class="section-header">
+      <div>
+        <h2>Phiên đăng nhập còn hạn</h2>
+        <p>Danh sách này chỉ hiển thị các session/token còn hạn theo expired time của JWT.</p>
+      </div>
+      <button id="loadSessionsButton" type="button" class="btn btn-primary">Tải phiên</button>
+    </div>
+
+    <p id="sessionsMessage" class="message"></p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Session ID</th>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Card ID</th>
+            <th>Thời gian đăng nhập</th>
+            <th>Hết hạn lúc</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="sessionsBody">
+          <tr><td colspan="7" class="empty-row">Bấm “Tải phiên” để xem danh sách.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

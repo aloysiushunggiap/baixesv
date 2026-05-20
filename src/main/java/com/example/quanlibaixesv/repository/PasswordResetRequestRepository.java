@@ -8,8 +8,6 @@ import java.util.List;
 
 public interface PasswordResetRequestRepository extends JpaRepository<PasswordResetRequest, Long> {
     List<PasswordResetRequest> findAllByOrderByRequestedAtDesc();
-
     List<PasswordResetRequest> findByStatusOrderByRequestedAtDesc(PasswordResetStatus status);
-
     boolean existsByStudentIdAndStatus(String studentId, PasswordResetStatus status);
 }

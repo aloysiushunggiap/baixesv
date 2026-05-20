@@ -5,12 +5,12 @@ document.addEventListener("DOMContentLoaded", startApp);
 async function startApp() {
     await renderLoginView();
     bindLayoutEvents();
-    initIdleLogout();
 
     if (!state.token) {
         showLoginView();
         return;
     }
 
+    startTokenExpirationWatcher();
     await enterApplication();
 }

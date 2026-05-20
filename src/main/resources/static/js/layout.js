@@ -65,14 +65,12 @@ function showOnlyRequestedPanel(panelId) {
     });
 }
 
-// Đánh dấu menu đang được chọn.
 function updateActiveMenu(panelId) {
     document.querySelectorAll(".nav-item").forEach(button => {
         button.classList.toggle("active", button.dataset.panel === panelId);
     });
 }
 
-// Ẩn/hiện các thành phần theo role hiện tại.
 function applyRoleUI() {
     const admin = isAdmin();
     const user = isUser();
@@ -90,7 +88,6 @@ function applyRoleUI() {
     });
 }
 
-// Cập nhật thông tin user ở topbar, sidebar và các panel có liên quan.
 function showCurrentUser() {
     const username = state.username || localStorage.getItem("username") || "-";
     const role = state.role || localStorage.getItem("role") || "-";
@@ -110,7 +107,7 @@ function showCurrentUser() {
 // Đi vào app sau khi đã có token hợp lệ ở frontend.
 async function enterApplication() {
     hydrateSessionFromToken();
-    resetSessionActivityClock();
+    startTokenExpirationWatcher();
     showAppView();
     applyRoleUI();
     showCurrentUser();

@@ -9,6 +9,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 
 @Service
@@ -17,6 +19,7 @@ public class JwtService {
     @Value("${app.jwt.secret}")
     private String secret;
 
+    // Đơn vị: milliseconds. Ví dụ 300000 = 5 phút.
     @Value("${app.jwt.expiration}")
     private long jwtExpiration;
 
@@ -24,18 +27,30 @@ public class JwtService {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
+    public Date generateExpirationDate() {
+        return new Date(System.currentTimeMillis() + jwtExpiration);
+    }
+
+    public LocalDateTime toLocalDateTime(Date date) {
+        return date.toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDateTime();
+    }
+
     public String generateToken(UserDetails userDetails,
                                 String role,
                                 String cardId,
                                 long tokenVersion,
-                                String sessionId) {
+                                String sessionId,
+                                Date expirationDate) {
         var builder = Jwts.builder()
+                .setId(sessionId) // jti = sessionId
                 .setSubject(userDetails.getUsername())
                 .claim("role", role)
                 .claim("ver", tokenVersion)
                 .claim("sid", sessionId)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
+                .setExpiration(expirationDate)
                 .signWith(getSignKey(), SignatureAlgorithm.HS256);
 
         if (cardId != null) {
@@ -58,7 +73,12 @@ public class JwtService {
     }
 
     public String extractSessionId(String token) {
-        return extractAllClaims(token).get("sid", String.class);
+        Claims claims = extractAllClaims(token);
+        String sessionId = claims.get("sid", String.class);
+        if (sessionId == null || sessionId.isBlank()) {
+            sessionId = claims.getId();
+        }
+        return sessionId;
     }
 
     public long extractTokenVersion(String token) {
@@ -72,6 +92,10 @@ public class JwtService {
         return Long.parseLong(value.toString());
     }
 
+    public Date extractExpiration(String token) {
+        return extractAllClaims(token).getExpiration();
+    }
+
     public boolean isTokenValid(String token, UserDetails userDetails, long currentTokenVersion) {
         String username = extractUsername(token);
         long tokenVersion = extractTokenVersion(token);
@@ -81,7 +105,7 @@ public class JwtService {
     }
 
     private boolean isTokenExpired(String token) {
-        return extractAllClaims(token).getExpiration().before(new Date());
+        return extractExpiration(token).before(new Date());
     }
 
     private Claims extractAllClaims(String token) {

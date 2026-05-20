@@ -26,7 +26,6 @@ async function renderLoginView() {
     showLoginFormOnly();
 }
 
-// Chỉ hiển thị form đăng nhập, ẩn toàn bộ form quên mật khẩu.
 function showLoginFormOnly() {
     const loginForm = document.getElementById("loginForm");
     const forgotPasswordBox = document.getElementById("forgotPasswordBox");
@@ -40,7 +39,6 @@ function showLoginFormOnly() {
     setMessage(forgotPasswordMessage, "", "");
 }
 
-// Ẩn form đăng nhập và chỉ hiển thị form gửi yêu cầu quên mật khẩu.
 function showForgotPasswordForm() {
     const loginForm = document.getElementById("loginForm");
     const forgotPasswordBox = document.getElementById("forgotPasswordBox");
@@ -57,7 +55,6 @@ function showForgotPasswordForm() {
     }
 }
 
-// Xử lý đăng nhập: gọi /api/auth/login, lưu token và mở dashboard.
 async function login(event) {
     event.preventDefault();
 
@@ -92,7 +89,6 @@ async function login(event) {
     });
 }
 
-// Gửi yêu cầu quên mật khẩu để admin duyệt.
 async function sendForgotPasswordRequest(event) {
     event.preventDefault();
 
@@ -161,24 +157,34 @@ function clearForgotPasswordForm() {
     }
 }
 
-// Lưu thông tin đăng nhập vào state và localStorage.
 function saveLoginSession(data) {
     state.token = data.token;
     state.username = data.username;
     state.role = data.role;
+    state.sessionId = data.sessionId || "";
+    state.expiresAt = data.expiresAt || "";
 
     const decoded = decodeJwtPayload(data.token);
     state.cardId = decoded.cardId || "";
+
+    if (!state.sessionId) {
+        state.sessionId = decoded.sid || decoded.jti || "";
+    }
+
+    if (!state.expiresAt && decoded.exp) {
+        state.expiresAt = new Date(Number(decoded.exp) * 1000).toISOString();
+    }
 
     localStorage.setItem("token", state.token);
     localStorage.setItem("username", state.username);
     localStorage.setItem("role", state.role);
     localStorage.setItem("cardId", state.cardId);
+    localStorage.setItem("sessionId", state.sessionId);
+    localStorage.setItem("expiresAt", state.expiresAt);
 
-    resetSessionActivityClock();
+    startTokenExpirationWatcher();
 }
 
-// Đăng xuất: xóa localStorage, quay lại màn hình login và xóa panel đang mở.
 function logout(message = "Đã đăng xuất.", type = "success") {
     clearStoredSession();
 
@@ -189,13 +195,23 @@ function logout(message = "Đã đăng xuất.", type = "success") {
     showToast(message, type);
 }
 
-// Khôi phục cardId từ JWT nếu localStorage chưa có.
 function hydrateSessionFromToken() {
     if (!state.token) return;
 
     const decoded = decodeJwtPayload(state.token);
+
     if (!state.cardId && decoded.cardId) {
         state.cardId = decoded.cardId;
         localStorage.setItem("cardId", state.cardId);
+    }
+
+    if (!state.sessionId) {
+        state.sessionId = decoded.sid || decoded.jti || "";
+        localStorage.setItem("sessionId", state.sessionId);
+    }
+
+    if (!state.expiresAt && decoded.exp) {
+        state.expiresAt = new Date(Number(decoded.exp) * 1000).toISOString();
+        localStorage.setItem("expiresAt", state.expiresAt);
     }
 }
