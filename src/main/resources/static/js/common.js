@@ -12,15 +12,56 @@ const state = {
 
 // Danh sách giao diện con: mỗi panel có file HTML riêng và hàm khởi tạo riêng.
 const PANEL_CONFIGS = {
-    dashboardPanel: { title: "Tổng quan", view: "/views/dashboard.html", init: "initDashboardPanel" },
-    swipePanel: { title: "Quẹt thẻ test", view: "/views/swipe.html", init: "initSwipePanel" },
-    pricingPanel: { title: "Bảng giá", view: "/views/pricing.html", init: "initPricingPanel" },
-    simulatePanel: { title: "Mô phỏng phí", view: "/views/simulate.html", init: "initSimulatePanel", adminOnly: true },
-    historyPanel: { title: "Lịch sử gửi xe", view: "/views/history.html", init: "initHistoryPanel" },
-    studentPanel: { title: "Sinh viên / thẻ", view: "/views/students.html", init: "initStudentPanel", adminOnly: true },
-    requestsPanel: { title: "Yêu cầu", view: "/views/students.html", init: "initPasswordRequestsPanel", adminOnly: true },
-    sessionsPanel: { title: "Phiên đăng nhập", view: "/views/sessions.html", init: "initSessionsPanel", adminOnly: true },
-    accountPanel: { title: "Đổi mật khẩu", view: "/views/account.html", init: "initAccountPanel" }
+    dashboardPanel: {
+        title: "Tổng quan",
+        view: "/views/dashboard.html",
+        init: "initDashboardPanel"
+    },
+
+    swipePanel: {
+        title: "Quẹt thẻ test",
+        view: "/views/swipe.html",
+        init: "initSwipePanel"
+    },
+
+    pricingPanel: {
+        title: "Bảng giá",
+        view: "/views/pricing.html",
+        init: "initPricingPanel"
+    },
+
+    simulatePanel: {
+        title: "Mô phỏng phí",
+        view: "/views/simulate.html",
+        init: "initSimulatePanel",
+        adminOnly: true
+    },
+
+    historyPanel: {
+        title: "Lịch sử gửi xe",
+        view: "/views/history.html",
+        init: "initHistoryPanel"
+    },
+
+    studentPanel: {
+        title: "Sinh viên / thẻ",
+        view: "/views/students.html",
+        init: "initStudentPanel",
+        adminOnly: true
+    },
+
+    requestsPanel: {
+        title: "Yêu cầu",
+        view: "/views/requests.html",
+        init: "initPasswordRequestsPanel",
+        adminOnly: true
+    },
+
+    accountPanel: {
+        title: "Đổi mật khẩu",
+        view: "/views/account.html",
+        init: "initAccountPanel"
+    }
 };
 
 // Nạp file HTML giao diện con từ thư mục /views.
