@@ -158,24 +158,15 @@ function clearForgotPasswordForm() {
 }
 
 function saveLoginSession(data) {
-    state.token = data.token;
-    state.username = data.username;
-    state.role = data.role;
+    // Token nằm trong HttpOnly cookie, không lưu token vào localStorage.
+    state.token = "";
+    state.username = data.username || "";
+    state.role = data.role || "";
     state.sessionId = data.sessionId || "";
     state.expiresAt = data.expiresAt || "";
+    state.cardId = data.cardId || "";
 
-    const decoded = decodeJwtPayload(data.token);
-    state.cardId = decoded.cardId || "";
-
-    if (!state.sessionId) {
-        state.sessionId = decoded.sid || decoded.jti || "";
-    }
-
-    if (!state.expiresAt && decoded.exp) {
-        state.expiresAt = new Date(Number(decoded.exp) * 1000).toISOString();
-    }
-
-    localStorage.setItem("token", state.token);
+    localStorage.removeItem("token");
     localStorage.setItem("username", state.username);
     localStorage.setItem("role", state.role);
     localStorage.setItem("cardId", state.cardId);
@@ -185,7 +176,22 @@ function saveLoginSession(data) {
     startTokenExpirationWatcher();
 }
 
-function logout(message = "Đã đăng xuất.", type = "success") {
+async function restoreSessionFromCookie() {
+    try {
+        const data = await apiRequest("/api/auth/me", {
+            method: "GET",
+            silent401: true
+        });
+        saveLoginSession(data);
+        return true;
+    } catch (error) {
+        clearStoredSession();
+        return false;
+    }
+}
+
+async function logout(message = "Đã đăng xuất.", type = "success") {
+    await clearServerCookie();
     clearStoredSession();
 
     const panelHost = document.getElementById("panelHost");
@@ -196,22 +202,6 @@ function logout(message = "Đã đăng xuất.", type = "success") {
 }
 
 function hydrateSessionFromToken() {
-    if (!state.token) return;
-
-    const decoded = decodeJwtPayload(state.token);
-
-    if (!state.cardId && decoded.cardId) {
-        state.cardId = decoded.cardId;
-        localStorage.setItem("cardId", state.cardId);
-    }
-
-    if (!state.sessionId) {
-        state.sessionId = decoded.sid || decoded.jti || "";
-        localStorage.setItem("sessionId", state.sessionId);
-    }
-
-    if (!state.expiresAt && decoded.exp) {
-        state.expiresAt = new Date(Number(decoded.exp) * 1000).toISOString();
-        localStorage.setItem("expiresAt", state.expiresAt);
-    }
+    // Giữ lại hàm để không ảnh hưởng layout.js cũ.
+    // Phiên hiện tại được hydrate bằng /api/auth/me từ cookie HttpOnly.
 }

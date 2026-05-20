@@ -27,6 +27,10 @@ public class JwtService {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
+    public long getJwtExpirationMillis() {
+        return jwtExpiration;
+    }
+
     public Date generateExpirationDate() {
         return new Date(System.currentTimeMillis() + jwtExpiration);
     }

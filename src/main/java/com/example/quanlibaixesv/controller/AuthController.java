@@ -9,15 +9,19 @@ import com.example.quanlibaixesv.model.Student;
 import com.example.quanlibaixesv.model.UserSession;
 import com.example.quanlibaixesv.repository.AdminAccountRepository;
 import com.example.quanlibaixesv.repository.StudentRepository;
+import com.example.quanlibaixesv.security.JwtCookieService;
 import com.example.quanlibaixesv.security.JwtService;
 import com.example.quanlibaixesv.service.CardSignatureService;
 import com.example.quanlibaixesv.service.LoginSessionService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,6 +47,9 @@ public class AuthController {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private JwtCookieService jwtCookieService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -145,7 +152,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponseDto login(@RequestBody LoginRequestDto request) {
+    public LoginResponseDto login(@RequestBody LoginRequestDto request,
+                                  HttpServletResponse response) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getUsername(),
@@ -181,12 +189,16 @@ public class AuthController {
                     expirationDate
             );
 
+            // Token được lưu trong cookie HttpOnly để JavaScript không đọc được token trực tiếp.
+            jwtCookieService.addLoginCookie(response, token, jwtService.getJwtExpirationMillis());
+
             return new LoginResponseDto(
-                    token,
+                    null,
                     admin.getUsername(),
                     "ROLE_ADMIN",
                     session.getId(),
-                    expiresAt
+                    expiresAt,
+                    null
             );
         }
 
@@ -219,13 +231,51 @@ public class AuthController {
                 expirationDate
         );
 
+        // Token được lưu trong cookie HttpOnly để JavaScript không đọc được token trực tiếp.
+        jwtCookieService.addLoginCookie(response, token, jwtService.getJwtExpirationMillis());
+
         return new LoginResponseDto(
-                token,
+                null,
                 student.getUsername(),
                 student.getRole().name(),
                 session.getId(),
-                expiresAt
+                expiresAt,
+                student.getCardId()
         );
+    }
+
+    @GetMapping("/me")
+    public LoginResponseDto currentUser(HttpServletRequest request) {
+        String token = jwtCookieService.resolveToken(request);
+        if (token == null || token.isBlank()) {
+            throw new RuntimeException("Bạn chưa đăng nhập.");
+        }
+
+        return new LoginResponseDto(
+                null,
+                jwtService.extractUsername(token),
+                jwtService.extractRole(token),
+                jwtService.extractSessionId(token),
+                jwtService.toLocalDateTime(jwtService.extractExpiration(token)),
+                jwtService.extractCardId(token)
+        );
+    }
+
+    @PostMapping("/logout")
+    public Map<String, Object> logout(HttpServletRequest request,
+                                      HttpServletResponse response) {
+        String token = jwtCookieService.resolveToken(request);
+        if (token != null && !token.isBlank()) {
+            try {
+                String sessionId = jwtService.extractSessionId(token);
+                loginSessionService.deleteSession(sessionId);
+            } catch (Exception ignored) {
+                // Nếu token đã hết hạn hoặc không parse được, vẫn phải xóa cookie ở browser.
+            }
+        }
+
+        jwtCookieService.addLogoutCookie(response);
+        return Map.of("message", "Đã đăng xuất.");
     }
 
     private boolean hasRole(Authentication authentication, String role) {

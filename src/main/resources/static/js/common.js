@@ -1,6 +1,7 @@
 // Lưu trạng thái đăng nhập dùng chung cho toàn bộ giao diện.
+// JWT không lưu trong localStorage nữa. Token nằm trong cookie HttpOnly do backend set.
 const state = {
-    token: localStorage.getItem("token") || "",
+    token: "",
     username: localStorage.getItem("username") || "",
     role: localStorage.getItem("role") || "",
     cardId: localStorage.getItem("cardId") || "",
@@ -12,61 +13,20 @@ const state = {
 
 // Danh sách giao diện con: mỗi panel có file HTML riêng và hàm khởi tạo riêng.
 const PANEL_CONFIGS = {
-    dashboardPanel: {
-        title: "Tổng quan",
-        view: "/views/dashboard.html",
-        init: "initDashboardPanel"
-    },
-
-    swipePanel: {
-        title: "Quẹt thẻ test",
-        view: "/views/swipe.html",
-        init: "initSwipePanel"
-    },
-
-    pricingPanel: {
-        title: "Bảng giá",
-        view: "/views/pricing.html",
-        init: "initPricingPanel"
-    },
-
-    simulatePanel: {
-        title: "Mô phỏng phí",
-        view: "/views/simulate.html",
-        init: "initSimulatePanel",
-        adminOnly: true
-    },
-
-    historyPanel: {
-        title: "Lịch sử gửi xe",
-        view: "/views/history.html",
-        init: "initHistoryPanel"
-    },
-
-    studentPanel: {
-        title: "Sinh viên / thẻ",
-        view: "/views/students.html",
-        init: "initStudentPanel",
-        adminOnly: true
-    },
-
-    requestsPanel: {
-        title: "Yêu cầu",
-        view: "/views/requests.html",
-        init: "initPasswordRequestsPanel",
-        adminOnly: true
-    },
-
-    accountPanel: {
-        title: "Đổi mật khẩu",
-        view: "/views/account.html",
-        init: "initAccountPanel"
-    }
+    dashboardPanel: { title: "Tổng quan", view: "/views/dashboard.html", init: "initDashboardPanel" },
+    swipePanel: { title: "Quẹt thẻ test", view: "/views/swipe.html", init: "initSwipePanel" },
+    pricingPanel: { title: "Bảng giá", view: "/views/pricing.html", init: "initPricingPanel" },
+    simulatePanel: { title: "Mô phỏng tính phí", view: "/views/simulate.html", init: "initSimulatePanel", adminOnly: true },
+    historyPanel: { title: "Lịch sử gửi xe", view: "/views/history.html", init: "initHistoryPanel" },
+    studentPanel: { title: "Sinh viên / thẻ", view: "/views/students.html", init: "initStudentPanel", adminOnly: true },
+    requestsPanel: { title: "Yêu cầu", view: "/views/students.html", init: "initPasswordRequestsPanel", adminOnly: true },
+    sessionsPanel: { title: "Phiên đăng nhập", view: "/views/sessions.html", init: "initSessionsPanel", adminOnly: true },
+    accountPanel: { title: "Đổi mật khẩu", view: "/views/account.html", init: "initAccountPanel" }
 };
 
 // Nạp file HTML giao diện con từ thư mục /views.
 async function loadHtml(url) {
-    const response = await fetch(url, { cache: "no-store" });
+    const response = await fetch(url, { cache: "no-store", credentials: "include" });
     if (!response.ok) {
         throw new Error("Không tải được giao diện: " + url);
     }
@@ -74,7 +34,8 @@ async function loadHtml(url) {
 }
 
 function getToken() {
-    return state.token || localStorage.getItem("token") || "";
+    // Giữ hàm này để không làm hỏng code cũ, nhưng frontend không đọc JWT nữa.
+    return "";
 }
 
 function getRole() {
@@ -89,24 +50,24 @@ function isUser() {
     return getRole() === "ROLE_USER";
 }
 
-function getAuthHeaders() {
+function getDefaultHeaders() {
     return {
         "Content-Type": "application/json",
-        "Accept": "application/json, text/plain, */*",
-        "Authorization": "Bearer " + getToken()
+        "Accept": "application/json, text/plain, */*"
     };
 }
 
-// Gọi API dùng chung: không kiểm tra idle timeout ở frontend nữa.
-// Nếu token hết exp hoặc sessionId bị xóa, backend trả 401 và frontend logout.
+// Gọi API dùng chung.
+// Browser tự gửi JWT cookie HttpOnly nhờ credentials: "include".
+// Không gắn Authorization Bearer ở frontend nữa để tránh token bị JS đọc/lưu.
 async function apiRequest(url, options = {}) {
     const method = options.method || "GET";
-    const requiresAuth = options.auth !== false;
-    const headers = requiresAuth
-        ? getAuthHeaders()
-        : { "Content-Type": "application/json", "Accept": "application/json, text/plain, */*" };
-
-    const fetchOptions = { method, headers };
+    const headers = options.headers || getDefaultHeaders();
+    const fetchOptions = {
+        method,
+        headers,
+        credentials: "include"
+    };
 
     if (options.body !== undefined) {
         fetchOptions.body = JSON.stringify(options.body);
@@ -125,7 +86,7 @@ async function apiRequest(url, options = {}) {
     if (!response.ok) {
         const message = getApiMessage(data, "Yêu cầu thất bại.");
 
-        if (response.status === 401) {
+        if (response.status === 401 && !options.silent401) {
             forceLogout("Phiên đăng nhập đã hết hạn hoặc đã bị đăng xuất. Vui lòng đăng nhập lại.", "error");
         }
 
@@ -147,12 +108,10 @@ function isTextErrorMessage(message) {
     return normalized.startsWith("không") || normalized.startsWith("loi") || normalized.startsWith("lỗi");
 }
 
-// Frontend hẹn giờ theo exp của token để tự quay về login khi token hết hạn.
-// Backend vẫn là nơi quyết định cuối cùng: request có token hết hạn sẽ bị trả 401.
+// Frontend hẹn giờ theo expiresAt do backend trả về sau login/me.
+// Backend vẫn là nơi quyết định cuối cùng: request có JWT cookie hết hạn sẽ bị trả 401.
 function startTokenExpirationWatcher() {
     clearTokenExpirationWatcher();
-
-    if (!getToken()) return;
 
     const expiresMs = getTokenExpirationTimeMs();
     if (!expiresMs) return;
@@ -177,20 +136,16 @@ function clearTokenExpirationWatcher() {
 
 function getTokenExpirationTimeMs() {
     const expiresAt = state.expiresAt || localStorage.getItem("expiresAt") || "";
-    if (expiresAt) {
-        const parsed = Date.parse(expiresAt);
-        if (!Number.isNaN(parsed)) return parsed;
-    }
+    if (!expiresAt) return 0;
 
-    const decoded = decodeJwtPayload(getToken());
-    if (decoded.exp) {
-        return Number(decoded.exp) * 1000;
-    }
+    const parsed = Date.parse(expiresAt);
+    if (Number.isNaN(parsed)) return 0;
 
-    return 0;
+    return parsed;
 }
 
 function clearStoredSession() {
+    // Xóa cả token cũ nếu trình duyệt còn lưu từ phiên bản localStorage trước đây.
     localStorage.removeItem("token");
     localStorage.removeItem("username");
     localStorage.removeItem("role");
@@ -209,12 +164,20 @@ function clearStoredSession() {
     clearTokenExpirationWatcher();
 }
 
-function forceLogout(message = "Đã đăng xuất.", type = "success") {
-    if (typeof logout === "function") {
-        logout(message, type);
-        return;
+async function clearServerCookie() {
+    try {
+        await fetch(API_BASE_URL + "/api/auth/logout", {
+            method: "POST",
+            credentials: "include",
+            headers: getDefaultHeaders()
+        });
+    } catch (error) {
+        // Nếu backend tạm thời không phản hồi, frontend vẫn xóa trạng thái cục bộ.
     }
+}
 
+function forceLogout(message = "Đã đăng xuất.", type = "success") {
+    clearServerCookie();
     clearStoredSession();
     if (typeof showLoginView === "function") showLoginView();
     showToast(message, type);

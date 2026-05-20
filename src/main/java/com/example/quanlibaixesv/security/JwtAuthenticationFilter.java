@@ -29,6 +29,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private JwtService jwtService;
 
     @Autowired
+    private JwtCookieService jwtCookieService;
+
+    @Autowired
     private CustomUserDetailsService userDetailsService;
 
     @Autowired
@@ -41,24 +44,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private StudentRepository studentRepo;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        String method = request.getMethod();
+
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
+
+        // Không chạy JWT filter cho static file để cookie hết hạn không làm hỏng giao diện.
+        if (!path.startsWith("/api/")) {
+            return true;
+        }
+
+        // Các API public này phải dùng được kể cả browser đang có cookie cũ/hết hạn.
+        return path.equals("/api/auth/login")
+                || path.equals("/api/auth/logout")
+                || path.equals("/api/password-reset/request");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        final String authHeader = request.getHeader("Authorization");
+        String jwt = jwtCookieService.resolveToken(request);
 
-        if (authHeader == null || authHeader.isBlank()) {
+        // Không có cookie/header token thì để Spring Security xử lý theo rule trong SecurityConfig.
+        if (jwt == null || jwt.isBlank()) {
             filterChain.doFilter(request, response);
-            return;
-        }
-
-        if (!authHeader.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            writeUnauthorizedResponse(response, "Authorization header không đúng định dạng Bearer token.");
-            return;
-        }
-
-        String jwt = authHeader.substring(7).trim();
-        if (jwt.isBlank()) {
-            writeUnauthorizedResponse(response, "Token không được để trống.");
             return;
         }
 

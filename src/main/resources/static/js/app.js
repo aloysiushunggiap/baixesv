@@ -1,12 +1,13 @@
 // Điểm khởi động chính của frontend.
 document.addEventListener("DOMContentLoaded", startApp);
 
-// Khởi động app: nạp login, gắn layout, sau đó quyết định vào app hay ở login.
+// Khởi động app: nạp login, gắn layout, sau đó kiểm tra cookie đăng nhập hiện tại.
 async function startApp() {
     await renderLoginView();
     bindLayoutEvents();
 
-    if (!state.token) {
+    const restored = await restoreSessionFromCookie();
+    if (!restored) {
         showLoginView();
         return;
     }
