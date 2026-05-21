@@ -3,6 +3,7 @@ package com.example.quanlibaixesv.controller;
 import com.example.quanlibaixesv.dto.LoginRequestDto;
 import com.example.quanlibaixesv.dto.LoginResponseDto;
 import com.example.quanlibaixesv.dto.RegisterRequestDto;
+import com.example.quanlibaixesv.exception.InvalidSessionException;
 import com.example.quanlibaixesv.model.AdminAccount;
 import com.example.quanlibaixesv.model.Role;
 import com.example.quanlibaixesv.model.Student;
@@ -16,6 +17,7 @@ import com.example.quanlibaixesv.service.LoginSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Date;
@@ -163,119 +166,279 @@ public class AuthController {
 
         AdminAccount admin = adminRepo.findByUsername(request.getUsername()).orElse(null);
         if (admin != null) {
-            UserDetails userDetails = org.springframework.security.core.userdetails.User
-                    .withUsername(admin.getUsername())
-                    .password(admin.getPassword())
-                    .authorities("ROLE_ADMIN")
-                    .build();
-
-            Date expirationDate = jwtService.generateExpirationDate();
-            LocalDateTime expiresAt = jwtService.toLocalDateTime(expirationDate);
-
-            UserSession session = loginSessionService.createSession(
-                    admin.getUsername(),
-                    "ROLE_ADMIN",
-                    admin.getTokenVersion(),
-                    null,
-                    expiresAt
-            );
-
-            String token = jwtService.generateToken(
-                    userDetails,
-                    "ROLE_ADMIN",
-                    null,
-                    admin.getTokenVersion(),
-                    session.getId(),
-                    expirationDate
-            );
-
-            // Token được lưu trong cookie HttpOnly để JavaScript không đọc được token trực tiếp.
-            jwtCookieService.addLoginCookie(response, token, jwtService.getJwtExpirationMillis());
-
-            return new LoginResponseDto(
-                    null,
-                    admin.getUsername(),
-                    "ROLE_ADMIN",
-                    session.getId(),
-                    expiresAt,
-                    null
-            );
+            return loginAdmin(admin, response);
         }
 
         Student student = studentRepo.findByUsername(request.getUsername())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản"));
 
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(student.getUsername())
-                .password(student.getPassword())
-                .authorities(student.getRole().name())
-                .build();
+        return loginStudent(student, response);
+    }
 
-        Date expirationDate = jwtService.generateExpirationDate();
-        LocalDateTime expiresAt = jwtService.toLocalDateTime(expirationDate);
+    @PostMapping("/refresh")
+    public LoginResponseDto refreshAccessToken(HttpServletRequest request,
+                                               HttpServletResponse response) {
+        String refreshToken = jwtCookieService.resolveRefreshToken(request);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không tìm thấy Refresh Token, vui lòng đăng nhập lại.");
+        }
 
-        UserSession session = loginSessionService.createSession(
-                student.getUsername(),
-                student.getRole().name(),
-                student.getTokenVersion(),
-                student.getCardId(),
-                expiresAt
-        );
+        try {
+            UserSession session = loginSessionService.validateRefreshToken(refreshToken);
 
-        String token = jwtService.generateToken(
-                userDetails,
-                student.getRole().name(),
-                student.getCardId(),
-                student.getTokenVersion(),
-                session.getId(),
-                expirationDate
-        );
+            AdminAccount admin = adminRepo.findByUsername(session.getUsername()).orElse(null);
+            if (admin != null) {
+                if (!admin.isEnabled()) {
+                    loginSessionService.deleteSession(session.getId());
+                    throw new InvalidSessionException("Tài khoản admin đang bị khóa.");
+                }
 
-        // Token được lưu trong cookie HttpOnly để JavaScript không đọc được token trực tiếp.
-        jwtCookieService.addLoginCookie(response, token, jwtService.getJwtExpirationMillis());
+                if (admin.getTokenVersion() != session.getTokenVersion()) {
+                    loginSessionService.deleteSession(session.getId());
+                    throw new InvalidSessionException("Phiên đăng nhập đã bị hủy do đổi mật khẩu.");
+                }
 
-        return new LoginResponseDto(
-                null,
-                student.getUsername(),
-                student.getRole().name(),
-                session.getId(),
-                expiresAt,
-                student.getCardId()
-        );
+                return issueNewAccessTokenForAdmin(admin, session, response);
+            }
+
+            Student student = studentRepo.findByUsername(session.getUsername())
+                    .orElseThrow(() -> new InvalidSessionException("Không tìm thấy tài khoản user."));
+
+            if (!student.isEnabled()) {
+                loginSessionService.deleteSession(session.getId());
+                throw new InvalidSessionException("Tài khoản user đang bị khóa.");
+            }
+
+            if (student.getTokenVersion() != session.getTokenVersion()) {
+                loginSessionService.deleteSession(session.getId());
+                throw new InvalidSessionException("Phiên đăng nhập đã bị hủy do đổi mật khẩu.");
+            }
+
+            return issueNewAccessTokenForStudent(student, session, response);
+        } catch (InvalidSessionException ex) {
+            jwtCookieService.addLogoutCookies(response);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        }
     }
 
     @GetMapping("/me")
     public LoginResponseDto currentUser(HttpServletRequest request) {
-        String token = jwtCookieService.resolveToken(request);
+        String token = jwtCookieService.resolveAccessToken(request);
         if (token == null || token.isBlank()) {
-            throw new RuntimeException("Bạn chưa đăng nhập.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Bạn chưa đăng nhập.");
         }
+
+        String sessionId = jwtService.extractSessionId(token);
+        UserSession session = loginSessionService.getSession(sessionId);
 
         return new LoginResponseDto(
                 null,
                 jwtService.extractUsername(token),
                 jwtService.extractRole(token),
-                jwtService.extractSessionId(token),
+                sessionId,
                 jwtService.toLocalDateTime(jwtService.extractExpiration(token)),
-                jwtService.extractCardId(token)
+                jwtService.extractCardId(token),
+                session.getRefreshExpiresAt()
         );
     }
 
     @PostMapping("/logout")
     public Map<String, Object> logout(HttpServletRequest request,
                                       HttpServletResponse response) {
-        String token = jwtCookieService.resolveToken(request);
-        if (token != null && !token.isBlank()) {
+        String accessToken = jwtCookieService.resolveAccessToken(request);
+        if (accessToken != null && !accessToken.isBlank()) {
             try {
-                String sessionId = jwtService.extractSessionId(token);
+                String sessionId = jwtService.extractSessionId(accessToken);
                 loginSessionService.deleteSession(sessionId);
             } catch (Exception ignored) {
-                // Nếu token đã hết hạn hoặc không parse được, vẫn phải xóa cookie ở browser.
+                // Nếu access token đã hết hạn hoặc không parse được, thử xóa bằng refresh token bên dưới.
             }
+        } else {
+            String refreshToken = jwtCookieService.resolveRefreshToken(request);
+            loginSessionService.deleteSessionByRefreshToken(refreshToken);
         }
 
-        jwtCookieService.addLogoutCookie(response);
+        jwtCookieService.addLogoutCookies(response);
         return Map.of("message", "Đã đăng xuất.");
+    }
+
+    private LoginResponseDto loginAdmin(AdminAccount admin, HttpServletResponse response) {
+        UserDetails userDetails = org.springframework.security.core.userdetails.User
+                .withUsername(admin.getUsername())
+                .password(admin.getPassword())
+                .authorities("ROLE_ADMIN")
+                .build();
+
+        Date accessExpirationDate = jwtService.generateExpirationDate();
+        LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
+        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
+        String refreshToken = loginSessionService.generateRefreshToken();
+
+        UserSession session = loginSessionService.createSession(
+                admin.getUsername(),
+                "ROLE_ADMIN",
+                admin.getTokenVersion(),
+                null,
+                accessExpiresAt,
+                refreshToken,
+                refreshExpiresAt
+        );
+
+        String accessToken = jwtService.generateToken(
+                userDetails,
+                "ROLE_ADMIN",
+                null,
+                admin.getTokenVersion(),
+                session.getId(),
+                accessExpirationDate
+        );
+
+        addAuthCookies(response, accessToken, refreshToken);
+
+        return new LoginResponseDto(
+                null,
+                admin.getUsername(),
+                "ROLE_ADMIN",
+                session.getId(),
+                accessExpiresAt,
+                null,
+                refreshExpiresAt
+        );
+    }
+
+    private LoginResponseDto loginStudent(Student student, HttpServletResponse response) {
+        UserDetails userDetails = org.springframework.security.core.userdetails.User
+                .withUsername(student.getUsername())
+                .password(student.getPassword())
+                .authorities(student.getRole().name())
+                .build();
+
+        Date accessExpirationDate = jwtService.generateExpirationDate();
+        LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
+        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
+        String refreshToken = loginSessionService.generateRefreshToken();
+
+        UserSession session = loginSessionService.createSession(
+                student.getUsername(),
+                student.getRole().name(),
+                student.getTokenVersion(),
+                student.getCardId(),
+                accessExpiresAt,
+                refreshToken,
+                refreshExpiresAt
+        );
+
+        String accessToken = jwtService.generateToken(
+                userDetails,
+                student.getRole().name(),
+                student.getCardId(),
+                student.getTokenVersion(),
+                session.getId(),
+                accessExpirationDate
+        );
+
+        addAuthCookies(response, accessToken, refreshToken);
+
+        return new LoginResponseDto(
+                null,
+                student.getUsername(),
+                student.getRole().name(),
+                session.getId(),
+                accessExpiresAt,
+                student.getCardId(),
+                refreshExpiresAt
+        );
+    }
+
+    private LoginResponseDto issueNewAccessTokenForAdmin(AdminAccount admin,
+                                                         UserSession session,
+                                                         HttpServletResponse response) {
+        UserDetails userDetails = org.springframework.security.core.userdetails.User
+                .withUsername(admin.getUsername())
+                .password(admin.getPassword())
+                .authorities("ROLE_ADMIN")
+                .build();
+
+        Date accessExpirationDate = jwtService.generateExpirationDate();
+        LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
+        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
+        String newRefreshToken = loginSessionService.generateRefreshToken();
+
+        UserSession updatedSession = loginSessionService.rotateRefreshToken(
+                session.getId(),
+                newRefreshToken,
+                refreshExpiresAt,
+                accessExpiresAt
+        );
+
+        String accessToken = jwtService.generateToken(
+                userDetails,
+                "ROLE_ADMIN",
+                null,
+                admin.getTokenVersion(),
+                updatedSession.getId(),
+                accessExpirationDate
+        );
+
+        addAuthCookies(response, accessToken, newRefreshToken);
+
+        return new LoginResponseDto(
+                null,
+                admin.getUsername(),
+                "ROLE_ADMIN",
+                updatedSession.getId(),
+                accessExpiresAt,
+                null,
+                refreshExpiresAt
+        );
+    }
+
+    private LoginResponseDto issueNewAccessTokenForStudent(Student student,
+                                                           UserSession session,
+                                                           HttpServletResponse response) {
+        UserDetails userDetails = org.springframework.security.core.userdetails.User
+                .withUsername(student.getUsername())
+                .password(student.getPassword())
+                .authorities(student.getRole().name())
+                .build();
+
+        Date accessExpirationDate = jwtService.generateExpirationDate();
+        LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
+        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
+        String newRefreshToken = loginSessionService.generateRefreshToken();
+
+        UserSession updatedSession = loginSessionService.rotateRefreshToken(
+                session.getId(),
+                newRefreshToken,
+                refreshExpiresAt,
+                accessExpiresAt
+        );
+
+        String accessToken = jwtService.generateToken(
+                userDetails,
+                student.getRole().name(),
+                student.getCardId(),
+                student.getTokenVersion(),
+                updatedSession.getId(),
+                accessExpirationDate
+        );
+
+        addAuthCookies(response, accessToken, newRefreshToken);
+
+        return new LoginResponseDto(
+                null,
+                student.getUsername(),
+                student.getRole().name(),
+                updatedSession.getId(),
+                accessExpiresAt,
+                student.getCardId(),
+                refreshExpiresAt
+        );
+    }
+
+    private void addAuthCookies(HttpServletResponse response, String accessToken, String refreshToken) {
+        jwtCookieService.addAccessTokenCookie(response, accessToken, jwtService.getJwtExpirationMillis());
+        jwtCookieService.addRefreshTokenCookie(response, refreshToken, jwtService.getRefreshTokenExpirationMillis());
     }
 
     private boolean hasRole(Authentication authentication, String role) {

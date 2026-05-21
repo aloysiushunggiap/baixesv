@@ -1,4 +1,4 @@
-// Nạp giao diện đăng nhập và gắn sự kiện submit cho form.
+// Nạp giao diện đăng nhập và gắn sự kiện cho form login/quên mật khẩu.
 async function renderLoginView() {
     const loginView = document.getElementById("loginView");
     loginView.innerHTML = await loadHtml("/views/login.html");
@@ -55,6 +55,7 @@ function showForgotPasswordForm() {
     }
 }
 
+// Xử lý đăng nhập: backend set Access Token + Refresh Token vào cookie HttpOnly.
 async function login(event) {
     event.preventDefault();
 
@@ -75,7 +76,8 @@ async function login(event) {
             const data = await apiRequest("/api/auth/login", {
                 method: "POST",
                 body: { username, password },
-                auth: false
+                auth: false,
+                skipRefresh: true
             });
 
             saveLoginSession(data);
@@ -89,6 +91,7 @@ async function login(event) {
     });
 }
 
+// Gửi yêu cầu quên mật khẩu để admin duyệt.
 async function sendForgotPasswordRequest(event) {
     event.preventDefault();
 
@@ -138,6 +141,7 @@ async function sendForgotPasswordRequest(event) {
             const data = await apiRequest("/api/password-reset/request", {
                 method: "POST",
                 auth: false,
+                skipRefresh: true,
                 body: { name, studentId, licensePlate, newPassword }
             });
 
@@ -164,6 +168,7 @@ function saveLoginSession(data) {
     state.role = data.role || "";
     state.sessionId = data.sessionId || "";
     state.expiresAt = data.expiresAt || "";
+    state.refreshExpiresAt = data.refreshExpiresAt || "";
     state.cardId = data.cardId || "";
 
     localStorage.removeItem("token");
@@ -172,6 +177,7 @@ function saveLoginSession(data) {
     localStorage.setItem("cardId", state.cardId);
     localStorage.setItem("sessionId", state.sessionId);
     localStorage.setItem("expiresAt", state.expiresAt);
+    localStorage.setItem("refreshExpiresAt", state.refreshExpiresAt);
 
     startTokenExpirationWatcher();
 }

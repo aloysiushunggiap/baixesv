@@ -19,9 +19,13 @@ public class JwtService {
     @Value("${app.jwt.secret}")
     private String secret;
 
-    // Đơn vị: milliseconds. Ví dụ 300000 = 5 phút.
+    // Access Token sống ngắn. Đơn vị: milliseconds. Ví dụ 300000 = 5 phút.
     @Value("${app.jwt.expiration}")
     private long jwtExpiration;
+
+    // Refresh Token sống 10 phút theo yêu cầu.
+    @Value("${app.jwt.refresh-expiration:600000}")
+    private long refreshTokenExpiration;
 
     private SecretKey getSignKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
@@ -31,8 +35,16 @@ public class JwtService {
         return jwtExpiration;
     }
 
+    public long getRefreshTokenExpirationMillis() {
+        return refreshTokenExpiration;
+    }
+
     public Date generateExpirationDate() {
         return new Date(System.currentTimeMillis() + jwtExpiration);
+    }
+
+    public LocalDateTime generateRefreshExpirationDateTime() {
+        return LocalDateTime.now().plusNanos(refreshTokenExpiration * 1_000_000L);
     }
 
     public LocalDateTime toLocalDateTime(Date date) {

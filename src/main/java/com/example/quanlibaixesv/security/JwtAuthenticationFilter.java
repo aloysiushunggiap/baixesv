@@ -59,6 +59,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // Các API public này phải dùng được kể cả browser đang có cookie cũ/hết hạn.
         return path.equals("/api/auth/login")
+                || path.equals("/api/auth/refresh")
                 || path.equals("/api/auth/logout")
                 || path.equals("/api/password-reset/request");
     }
@@ -67,7 +68,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String jwt = jwtCookieService.resolveToken(request);
+        String jwt = jwtCookieService.resolveAccessToken(request);
 
         // Không có cookie/header token thì để Spring Security xử lý theo rule trong SecurityConfig.
         if (jwt == null || jwt.isBlank()) {

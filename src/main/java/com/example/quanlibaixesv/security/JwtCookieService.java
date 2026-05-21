@@ -3,7 +3,6 @@ package com.example.quanlibaixesv.security;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -14,9 +13,11 @@ import java.time.Duration;
 @Service
 public class JwtCookieService {
 
-    @Getter
-    @Value("${app.cookie.name:baixesv_token}")
-    private String cookieName;
+    @Value("${app.cookie.access-name:baixesv_access_token}")
+    private String accessCookieName;
+
+    @Value("${app.cookie.refresh-name:baixesv_refresh_token}")
+    private String refreshCookieName;
 
     @Value("${app.cookie.secure:false}")
     private boolean cookieSecure;
@@ -24,8 +25,16 @@ public class JwtCookieService {
     @Value("${app.cookie.same-site:Lax}")
     private String cookieSameSite;
 
-    public void addLoginCookie(HttpServletResponse response, String token, long maxAgeMillis) {
-        ResponseCookie cookie = ResponseCookie.from(cookieName, token)
+    public String getAccessCookieName() {
+        return accessCookieName;
+    }
+
+    public String getRefreshCookieName() {
+        return refreshCookieName;
+    }
+
+    public void addAccessTokenCookie(HttpServletResponse response, String token, long maxAgeMillis) {
+        ResponseCookie cookie = ResponseCookie.from(accessCookieName, token)
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .sameSite(cookieSameSite)
@@ -36,8 +45,21 @@ public class JwtCookieService {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 
-    public void addLogoutCookie(HttpServletResponse response) {
-        ResponseCookie cookie = ResponseCookie.from(cookieName, "")
+    public void addRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeMillis) {
+        ResponseCookie cookie = ResponseCookie.from(refreshCookieName, refreshToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite(cookieSameSite)
+                // Refresh Token chỉ cần gửi cho API auth để giảm phạm vi cookie.
+                .path("/api/auth")
+                .maxAge(Duration.ofMillis(maxAgeMillis))
+                .build();
+
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    public void addLogoutCookies(HttpServletResponse response) {
+        ResponseCookie accessCookie = ResponseCookie.from(accessCookieName, "")
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .sameSite(cookieSameSite)
@@ -45,19 +67,33 @@ public class JwtCookieService {
                 .maxAge(0)
                 .build();
 
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        ResponseCookie refreshCookie = ResponseCookie.from(refreshCookieName, "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite(cookieSameSite)
+                .path("/api/auth")
+                .maxAge(0)
+                .build();
+
+        response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
     }
 
-    public String resolveToken(HttpServletRequest request) {
-        String tokenFromCookie = extractTokenFromCookie(request);
+    public String resolveAccessToken(HttpServletRequest request) {
+        String tokenFromCookie = extractTokenFromCookie(request, accessCookieName);
         if (tokenFromCookie != null && !tokenFromCookie.isBlank()) {
             return tokenFromCookie;
         }
 
+        // Fallback cho Postman: vẫn cho phép test bằng Authorization: Bearer <token>.
         return extractTokenFromAuthorizationHeader(request);
     }
 
-    private String extractTokenFromCookie(HttpServletRequest request) {
+    public String resolveRefreshToken(HttpServletRequest request) {
+        return extractTokenFromCookie(request, refreshCookieName);
+    }
+
+    private String extractTokenFromCookie(HttpServletRequest request, String cookieName) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             return null;

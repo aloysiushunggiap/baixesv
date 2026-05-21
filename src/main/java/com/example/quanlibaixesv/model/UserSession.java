@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Data
 public class UserSession {
 
-    // sessionId dùng để định danh token đang đăng nhập.
+    // sessionId dùng để định danh phiên đăng nhập.
     // Giá trị này cũng được lưu trong JWT claim "sid" và "jti".
     @Id
     @Column(length = 64)
@@ -33,9 +33,17 @@ public class UserSession {
     @Column(nullable = false)
     private LocalDateTime issuedAt;
 
-    // Thời điểm hết hạn của session được lấy đúng theo exp của JWT.
+
     @Column(nullable = false)
     private LocalDateTime expiresAt;
+
+
+    @Column(nullable = false, length = 128)
+    private String refreshTokenHash;
+
+
+    @Column(nullable = false)
+    private LocalDateTime refreshExpiresAt;
 
     @Column(nullable = false)
     private boolean active = true;

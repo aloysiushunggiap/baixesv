@@ -1,5 +1,5 @@
 // Lưu trạng thái đăng nhập dùng chung cho toàn bộ giao diện.
-// JWT không lưu trong localStorage nữa. Token nằm trong cookie HttpOnly do backend set.
+// Access Token và Refresh Token nằm trong cookie HttpOnly do backend set, không lưu trong localStorage.
 const state = {
     token: "",
     username: localStorage.getItem("username") || "",
@@ -7,6 +7,7 @@ const state = {
     cardId: localStorage.getItem("cardId") || "",
     sessionId: localStorage.getItem("sessionId") || "",
     expiresAt: localStorage.getItem("expiresAt") || "",
+    refreshExpiresAt: localStorage.getItem("refreshExpiresAt") || "",
     tokenExpirationTimer: null,
     activePanel: "dashboardPanel"
 };
@@ -16,15 +17,14 @@ const PANEL_CONFIGS = {
     dashboardPanel: { title: "Tổng quan", view: "/views/dashboard.html", init: "initDashboardPanel" },
     swipePanel: { title: "Quẹt thẻ test", view: "/views/swipe.html", init: "initSwipePanel" },
     pricingPanel: { title: "Bảng giá", view: "/views/pricing.html", init: "initPricingPanel" },
-    simulatePanel: { title: "Mô phỏng tính phí", view: "/views/simulate.html", init: "initSimulatePanel", adminOnly: true },
+    simulatePanel: { title: "Mô phỏng phí", view: "/views/simulate.html", init: "initSimulatePanel", adminOnly: true },
     historyPanel: { title: "Lịch sử gửi xe", view: "/views/history.html", init: "initHistoryPanel" },
     studentPanel: { title: "Sinh viên / thẻ", view: "/views/students.html", init: "initStudentPanel", adminOnly: true },
-    requestsPanel: { title: "Yêu cầu", view: "/views/students.html", init: "initPasswordRequestsPanel", adminOnly: true },
+    requestsPanel: { title: "Yêu cầu", view: "/views/requests.html", init: "initPasswordRequestsPanel", adminOnly: true },
     sessionsPanel: { title: "Phiên đăng nhập", view: "/views/sessions.html", init: "initSessionsPanel", adminOnly: true },
     accountPanel: { title: "Đổi mật khẩu", view: "/views/account.html", init: "initAccountPanel" }
 };
 
-// Nạp file HTML giao diện con từ thư mục /views.
 async function loadHtml(url) {
     const response = await fetch(url, { cache: "no-store", credentials: "include" });
     if (!response.ok) {
@@ -58,9 +58,39 @@ function getDefaultHeaders() {
 }
 
 // Gọi API dùng chung.
-// Browser tự gửi JWT cookie HttpOnly nhờ credentials: "include".
-// Không gắn Authorization Bearer ở frontend nữa để tránh token bị JS đọc/lưu.
+// Browser tự gửi cookie HttpOnly nhờ credentials: "include".
+// Nếu Access Token hết hạn nhưng Refresh Token còn hạn, hàm này tự gọi /api/auth/refresh rồi gọi lại request ban đầu.
 async function apiRequest(url, options = {}) {
+    const responseData = await doFetch(url, options);
+
+    if (responseData.ok) {
+        return responseData.data;
+    }
+
+    const status = responseData.response.status;
+    const message = getApiMessage(responseData.data, "Yêu cầu thất bại.");
+
+    const canTryRefresh = status === 401
+        && !options.skipRefresh
+        && url !== "/api/auth/login"
+        && url !== "/api/auth/refresh"
+        && url !== "/api/auth/logout";
+
+    if (canTryRefresh) {
+        const refreshed = await refreshAccessToken(options.silent401 === true);
+        if (refreshed) {
+            return apiRequest(url, { ...options, skipRefresh: true });
+        }
+    }
+
+    if (status === 401 && !options.silent401) {
+        forceLogout("Phiên đăng nhập đã hết hạn hoặc đã bị đăng xuất. Vui lòng đăng nhập lại.", "error");
+    }
+
+    throw new Error(message);
+}
+
+async function doFetch(url, options = {}) {
     const method = options.method || "GET";
     const headers = options.headers || getDefaultHeaders();
     const fetchOptions = {
@@ -83,17 +113,31 @@ async function apiRequest(url, options = {}) {
         data = await response.text();
     }
 
-    if (!response.ok) {
-        const message = getApiMessage(data, "Yêu cầu thất bại.");
+    return { ok: response.ok, response, data };
+}
 
-        if (response.status === 401 && !options.silent401) {
-            forceLogout("Phiên đăng nhập đã hết hạn hoặc đã bị đăng xuất. Vui lòng đăng nhập lại.", "error");
+async function refreshAccessToken(silent = false) {
+    try {
+        const result = await doFetch("/api/auth/refresh", {
+            method: "POST",
+            skipRefresh: true
+        });
+
+        if (!result.ok) {
+            if (!silent) {
+                showToast("Refresh Token đã hết hạn. Vui lòng đăng nhập lại.", "error");
+            }
+            return false;
         }
 
-        throw new Error(message);
+        saveLoginSession(result.data);
+        return true;
+    } catch (error) {
+        if (!silent) {
+            showToast("Không thể làm mới phiên đăng nhập.", "error");
+        }
+        return false;
     }
-
-    return data;
 }
 
 function getApiMessage(data, fallback) {
@@ -108,8 +152,8 @@ function isTextErrorMessage(message) {
     return normalized.startsWith("không") || normalized.startsWith("loi") || normalized.startsWith("lỗi");
 }
 
-// Frontend hẹn giờ theo expiresAt do backend trả về sau login/me.
-// Backend vẫn là nơi quyết định cuối cùng: request có JWT cookie hết hạn sẽ bị trả 401.
+// Frontend hẹn giờ theo Access Token expiresAt.
+// Khi Access Token gần hết hạn, frontend tự gọi /api/auth/refresh để lấy Access Token mới.
 function startTokenExpirationWatcher() {
     clearTokenExpirationWatcher();
 
@@ -118,13 +162,22 @@ function startTokenExpirationWatcher() {
 
     const remainingMs = expiresMs - Date.now();
     if (remainingMs <= 0) {
-        forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
+        refreshAccessToken(false).then(refreshed => {
+            if (!refreshed) {
+                forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
+            }
+        });
         return;
     }
 
-    state.tokenExpirationTimer = setTimeout(() => {
-        forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
-    }, remainingMs);
+    // Làm mới sớm hơn 3 giây để tránh request rơi đúng lúc Access Token hết hạn.
+    const refreshDelay = Math.max(0, remainingMs - 3000);
+    state.tokenExpirationTimer = setTimeout(async () => {
+        const refreshed = await refreshAccessToken(false);
+        if (!refreshed) {
+            forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
+        }
+    }, refreshDelay);
 }
 
 function clearTokenExpirationWatcher() {
@@ -152,6 +205,7 @@ function clearStoredSession() {
     localStorage.removeItem("cardId");
     localStorage.removeItem("sessionId");
     localStorage.removeItem("expiresAt");
+    localStorage.removeItem("refreshExpiresAt");
 
     state.token = "";
     state.username = "";
@@ -159,6 +213,7 @@ function clearStoredSession() {
     state.cardId = "";
     state.sessionId = "";
     state.expiresAt = "";
+    state.refreshExpiresAt = "";
     state.activePanel = "dashboardPanel";
 
     clearTokenExpirationWatcher();
