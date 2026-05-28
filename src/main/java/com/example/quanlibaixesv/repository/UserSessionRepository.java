@@ -16,9 +16,33 @@ public interface UserSessionRepository extends JpaRepository<UserSession, String
 
     List<UserSession> findByActiveTrueAndRefreshExpiresAtAfterOrderByRefreshExpiresAtAsc(LocalDateTime now);
 
-    void deleteByRefreshExpiresAtBefore(LocalDateTime now);
+    List<UserSession> findByUsernameOrderByIssuedAtDesc(String username);
+
+    List<UserSession> findAllByOrderByIssuedAtDesc();
 
     @Modifying
-    @Query("UPDATE UserSession s SET s.active = false WHERE s.username = :username AND s.active = true")
+    @Query("""
+            UPDATE UserSession s
+            SET s.active = false
+            WHERE s.id = :sessionId
+            """)
+    int deactivateById(@Param("sessionId") String sessionId);
+
+    @Modifying
+    @Query("""
+            UPDATE UserSession s
+            SET s.active = false
+            WHERE s.username = :username
+              AND s.active = true
+            """)
     int deactivateAllByUsername(@Param("username") String username);
+
+    @Modifying
+    @Query("""
+            UPDATE UserSession s
+            SET s.active = false
+            WHERE s.refreshExpiresAt <= :now
+              AND s.active = true
+            """)
+    int deactivateExpiredSessions(@Param("now") LocalDateTime now);
 }

@@ -3,8 +3,8 @@ package com.example.quanlibaixesv.service;
 import com.example.quanlibaixesv.exception.InvalidSessionException;
 import com.example.quanlibaixesv.model.UserSession;
 import com.example.quanlibaixesv.repository.UserSessionRepository;
-import org.springframework.scheduling.annotation.Scheduled;
 import com.example.quanlibaixesv.security.RefreshTokenHashService;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +48,7 @@ public class LoginSessionService {
                                      LocalDateTime accessExpiresAt,
                                      String refreshToken,
                                      LocalDateTime refreshExpiresAt) {
-        cleanupExpiredSessions();
+        deactivateExpiredSessions();
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -68,8 +68,10 @@ public class LoginSessionService {
     }
 
     @Transactional
-    public void validateSession(String sessionId, String username, long tokenVersionFromToken) {
-        cleanupExpiredSessions();
+    public void validateSession(String sessionId,
+                                String username,
+                                long tokenVersionFromToken) {
+        deactivateExpiredSessions();
 
         if (sessionId == null || sessionId.isBlank()) {
             throw new InvalidSessionException("Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại.");
@@ -78,14 +80,16 @@ public class LoginSessionService {
         UserSession session = userSessionRepo.findByIdAndActiveTrue(sessionId)
                 .orElseThrow(() -> new InvalidSessionException("Phiên đăng nhập đã hết hạn hoặc đã bị hủy."));
 
-        if (!session.getUsername().equals(username) || session.getTokenVersion() != tokenVersionFromToken) {
+        if (!session.getUsername().equals(username)
+                || session.getTokenVersion() != tokenVersionFromToken) {
             session.setActive(false);
             userSessionRepo.save(session);
             throw new InvalidSessionException("Phiên đăng nhập không khớp tài khoản, vui lòng đăng nhập lại.");
         }
 
         if (!session.getRefreshExpiresAt().isAfter(LocalDateTime.now())) {
-            userSessionRepo.deleteById(sessionId);
+            session.setActive(false);
+            userSessionRepo.save(session);
             throw new InvalidSessionException("Refresh Token đã hết hạn, vui lòng đăng nhập lại.");
         }
     }
@@ -95,7 +99,7 @@ public class LoginSessionService {
                                               String username,
                                               long tokenVersionFromToken,
                                               String refreshToken) {
-        cleanupExpiredSessions();
+        deactivateExpiredSessions();
 
         if (sessionId == null || sessionId.isBlank()) {
             throw new InvalidSessionException("Refresh Token không có sessionId.");
@@ -104,18 +108,22 @@ public class LoginSessionService {
         UserSession session = userSessionRepo.findByIdAndActiveTrue(sessionId)
                 .orElseThrow(() -> new InvalidSessionException("Phiên đăng nhập đã hết hạn hoặc đã bị hủy."));
 
-        if (!session.getUsername().equals(username) || session.getTokenVersion() != tokenVersionFromToken) {
-            userSessionRepo.deleteById(sessionId);
+        if (!session.getUsername().equals(username)
+                || session.getTokenVersion() != tokenVersionFromToken) {
+            session.setActive(false);
+            userSessionRepo.save(session);
             throw new InvalidSessionException("Refresh Token không khớp tài khoản.");
         }
 
         if (!session.getRefreshExpiresAt().isAfter(LocalDateTime.now())) {
-            userSessionRepo.deleteById(sessionId);
+            session.setActive(false);
+            userSessionRepo.save(session);
             throw new InvalidSessionException("Refresh Token đã hết hạn, vui lòng đăng nhập lại.");
         }
 
         if (!refreshTokenHashService.matches(refreshToken, session.getRefreshTokenHash())) {
-            userSessionRepo.deleteById(sessionId);
+            session.setActive(false);
+            userSessionRepo.save(session);
             throw new InvalidSessionException("Refresh Token không hợp lệ hoặc đã được thay thế.");
         }
 
@@ -144,12 +152,22 @@ public class LoginSessionService {
                 .orElseThrow(() -> new InvalidSessionException("Phiên đăng nhập không tồn tại hoặc đã bị hủy."));
     }
 
+    /**
+     * Không xóa session khỏi DB nữa.
+     * Chỉ chuyển active = false để giữ lịch sử đăng nhập.
+     */
     @Transactional
     public void deleteSession(String sessionId) {
+        deactivateSession(sessionId);
+    }
+
+    @Transactional
+    public void deactivateSession(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return;
         }
-        userSessionRepo.deleteById(sessionId);
+
+        userSessionRepo.deactivateById(sessionId);
     }
 
     @Transactional
@@ -157,6 +175,7 @@ public class LoginSessionService {
         if (username == null || username.isBlank()) {
             return;
         }
+
         userSessionRepo.deactivateAllByUsername(username);
     }
 
@@ -173,15 +192,62 @@ public class LoginSessionService {
                         "cardId", session.getCardId() == null ? "" : session.getCardId(),
                         "issuedAt", session.getIssuedAt(),
                         "expiresAt", session.getExpiresAt(),
-                        "refreshExpiresAt", session.getRefreshExpiresAt()
+                        "refreshExpiresAt", session.getRefreshExpiresAt(),
+                        "active", session.isActive()
                 ))
                 .toList();
     }
 
-    // Chỉ xóa khi Refresh Token hết hạn. Access Token hết hạn vẫn có thể refresh nếu RT còn hạn.
+    /**
+     * Dùng cho màn hình lịch sử đăng nhập.
+     * Trả về cả phiên đang active và phiên đã hết hạn/logout.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllSessionHistory() {
+        return userSessionRepo.findAllByOrderByIssuedAtDesc()
+                .stream()
+                .map(session -> Map.<String, Object>of(
+                        "sessionId", session.getId(),
+                        "username", session.getUsername(),
+                        "role", session.getRole(),
+                        "cardId", session.getCardId() == null ? "" : session.getCardId(),
+                        "issuedAt", session.getIssuedAt(),
+                        "expiresAt", session.getExpiresAt(),
+                        "refreshExpiresAt", session.getRefreshExpiresAt(),
+                        "active", session.isActive()
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getSessionHistoryByUsername(String username) {
+        return userSessionRepo.findByUsernameOrderByIssuedAtDesc(username)
+                .stream()
+                .map(session -> Map.<String, Object>of(
+                        "sessionId", session.getId(),
+                        "username", session.getUsername(),
+                        "role", session.getRole(),
+                        "cardId", session.getCardId() == null ? "" : session.getCardId(),
+                        "issuedAt", session.getIssuedAt(),
+                        "expiresAt", session.getExpiresAt(),
+                        "refreshExpiresAt", session.getRefreshExpiresAt(),
+                        "active", session.isActive()
+                ))
+                .toList();
+    }
+
+    /**
+     * Trước đây hàm này xóa dòng hết hạn khỏi DB.
+     * Bây giờ chỉ chuyển active = false để giữ lại lịch sử.
+     */
     @Scheduled(fixedRate = 60000)
     @Transactional
     public void cleanupExpiredSessions() {
-        userSessionRepo.deleteByRefreshExpiresAtBefore(LocalDateTime.now());
+        deactivateExpiredSessions();
+    }
+
+    @Transactional
+    public void deactivateExpiredSessions() {
+        userSessionRepo.deactivateExpiredSessions(LocalDateTime.now());
     }
 }
