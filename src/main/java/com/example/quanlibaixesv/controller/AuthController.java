@@ -413,11 +413,7 @@ public class AuthController {
         Date accessExpirationDate = jwtService.generateExpirationDate();
         LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
 
-        /*
-         * Quan trọng:
-         * Không tạo refreshExpirationDate mới bằng jwtService.generateRefreshExpirationDate().
-         * Dùng lại hạn RT cũ của session để RT không bị gia hạn sau mỗi lần refresh.
-         */
+
         LocalDateTime refreshExpiresAt = session.getRefreshExpiresAt();
         Date refreshExpirationDate = toDate(refreshExpiresAt);
 
@@ -527,11 +523,7 @@ public class AuthController {
     }
 
     private Date toDate(LocalDateTime localDateTime) {
-        return Date.from(
-                localDateTime
-                        .atZone(ZoneId.systemDefault())
-                        .toInstant()
-        );
+        return Date.from(localDateTime.atZone(ZoneId.systemDefault()).toInstant());
     }
 
     private long remainingMillis(LocalDateTime expiresAt) {

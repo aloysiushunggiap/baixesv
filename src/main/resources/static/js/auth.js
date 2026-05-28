@@ -4,21 +4,25 @@ async function renderLoginView() {
     loginView.innerHTML = await loadHtml("/views/login.html");
 
     const loginForm = document.getElementById("loginForm");
+
     if (loginForm) {
         loginForm.addEventListener("submit", login);
     }
 
     const showForgotPasswordButton = document.getElementById("showForgotPasswordButton");
+
     if (showForgotPasswordButton) {
         showForgotPasswordButton.addEventListener("click", showForgotPasswordForm);
     }
 
     const backToLoginButton = document.getElementById("backToLoginButton");
+
     if (backToLoginButton) {
         backToLoginButton.addEventListener("click", showLoginFormOnly);
     }
 
     const forgotPasswordForm = document.getElementById("forgotPasswordForm");
+
     if (forgotPasswordForm) {
         forgotPasswordForm.addEventListener("submit", sendForgotPasswordRequest);
     }
@@ -32,8 +36,13 @@ function showLoginFormOnly() {
     const loginMessage = document.getElementById("loginMessage");
     const forgotPasswordMessage = document.getElementById("forgotPasswordMessage");
 
-    if (loginForm) loginForm.classList.remove("hidden");
-    if (forgotPasswordBox) forgotPasswordBox.classList.add("hidden");
+    if (loginForm) {
+        loginForm.classList.remove("hidden");
+    }
+
+    if (forgotPasswordBox) {
+        forgotPasswordBox.classList.add("hidden");
+    }
 
     setMessage(loginMessage, "", "");
     setMessage(forgotPasswordMessage, "", "");
@@ -45,8 +54,13 @@ function showForgotPasswordForm() {
     const forgotFullName = document.getElementById("forgotFullName");
     const loginMessage = document.getElementById("loginMessage");
 
-    if (loginForm) loginForm.classList.add("hidden");
-    if (forgotPasswordBox) forgotPasswordBox.classList.remove("hidden");
+    if (loginForm) {
+        loginForm.classList.add("hidden");
+    }
+
+    if (forgotPasswordBox) {
+        forgotPasswordBox.classList.remove("hidden");
+    }
 
     setMessage(loginMessage, "", "");
 
@@ -74,7 +88,10 @@ async function login(event) {
         try {
             const data = await apiRequest("/api/auth/login", {
                 method: "POST",
-                body: { username, password },
+                body: {
+                    username,
+                    password
+                },
                 skipRefresh: true,
                 suppressLogout: true
             });
@@ -84,6 +101,7 @@ async function login(event) {
             setMessage(message, "Đăng nhập thành công.", "success");
             showToast("Đăng nhập thành công.", "success");
             await enterApplication();
+            startTokenExpirationWatcher();
         } catch (error) {
             setMessage(message, error.message || "Đăng nhập thất bại.", "error");
         }
@@ -140,10 +158,20 @@ async function sendForgotPasswordRequest(event) {
                 method: "POST",
                 skipRefresh: true,
                 suppressLogout: true,
-                body: { name, studentId, licensePlate, newPassword }
+                body: {
+                    name,
+                    studentId,
+                    licensePlate,
+                    newPassword
+                }
             });
 
-            setMessage(message, data.message || "Đã gửi yêu cầu cho admin. Vui lòng chờ phê duyệt.", "success");
+            setMessage(
+                message,
+                data.message || "Đã gửi yêu cầu cho admin. Vui lòng chờ phê duyệt.",
+                "success"
+            );
+
             showToast("Đã gửi yêu cầu quên mật khẩu cho admin.", "success");
             clearForgotPasswordForm();
         } catch (error) {
@@ -154,6 +182,7 @@ async function sendForgotPasswordRequest(event) {
 
 function clearForgotPasswordForm() {
     const forgotPasswordForm = document.getElementById("forgotPasswordForm");
+
     if (forgotPasswordForm) {
         forgotPasswordForm.reset();
     }
@@ -164,13 +193,12 @@ async function logout(message = "Đã đăng xuất.", type = "success") {
     clearStoredSession();
 
     const panelHost = document.getElementById("panelHost");
-    if (panelHost) panelHost.innerHTML = "";
+
+    if (panelHost) {
+        panelHost.innerHTML = "";
+    }
 
     showLoginView();
     showToast(message, type);
 }
 
-// Giữ hàm này để không làm hỏng code cũ. Không cần hydrate từ JWT nữa.
-function hydrateSessionFromToken() {
-    return;
-}

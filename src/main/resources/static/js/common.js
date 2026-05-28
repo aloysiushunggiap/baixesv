@@ -1,5 +1,3 @@
-// Lưu trạng thái đăng nhập dùng chung cho toàn bộ giao diện.
-// JWT không lưu trong localStorage nữa. Token nằm trong cookie HttpOnly do backend set.
 const state = {
     token: "",
     username: localStorage.getItem("username") || "",
@@ -13,11 +11,9 @@ const state = {
 
 let refreshRequestPromise = null;
 let accessTokenTimer = null;
-let refreshTokenTimer = null;
 let authVisibilityBound = false;
 let isLoggingOut = false;
 
-// Danh sách giao diện con: mỗi panel có file HTML riêng và hàm khởi tạo riêng.
 const PANEL_CONFIGS = {
     dashboardPanel: {
         title: "Tổng quan",
@@ -70,7 +66,6 @@ const PANEL_CONFIGS = {
     }
 };
 
-// Nạp file HTML giao diện con từ thư mục /views.
 async function loadHtml(url) {
     const response = await fetch(url, {
         cache: "no-store",
@@ -84,8 +79,6 @@ async function loadHtml(url) {
     return response.text();
 }
 
-// Giữ hàm này để không làm hỏng code cũ.
-// Frontend không đọc JWT nữa.
 function getToken() {
     return "";
 }
@@ -109,15 +102,10 @@ function getDefaultHeaders() {
     };
 }
 
-// =====================
-// AUTH TIMER / SYNC UI
-// =====================
-
 function parseServerDateTime(value) {
     if (!value) return null;
 
-    const text = String(value).trim();
-    const date = new Date(text);
+    const date = new Date(String(value).trim());
 
     if (Number.isNaN(date.getTime())) {
         return null;
@@ -141,44 +129,43 @@ function clearAuthTimers() {
         clearTimeout(accessTokenTimer);
         accessTokenTimer = null;
     }
-
-    if (refreshTokenTimer) {
-        clearTimeout(refreshTokenTimer);
-        refreshTokenTimer = null;
-    }
 }
 
+/*
+ * Chỉ canh Access Token.
+ *
+ * Không được đặt timer logout theo refreshExpiresAt.
+ * Vì RT hết hạn không có nghĩa là AT hiện tại phải logout ngay.
+ *
+ * Ví dụ:
+ * AT = 2 phút, RT = 3 phút
+ * Phút 2 refresh thành công, AT mới sống tới phút 4
+ * Phút 3 RT hết hạn
+ * Phút 3-4 vẫn phải dùng được AT mới
+ * Phút 4 AT hết hạn, refresh fail vì RT hết hạn, lúc đó mới logout
+ */
 function scheduleAuthTimers() {
     clearAuthTimers();
 
-    if (!state.username || !state.refreshExpiresAt) {
+    if (!state.username || !state.expiresAt) {
         return;
     }
 
-    const refreshMs = millisUntil(state.refreshExpiresAt);
     const accessMs = millisUntil(state.expiresAt);
 
-    // Nếu Refresh Token đã hết hạn thì logout ngay khỏi giao diện.
-    if (refreshMs !== null && refreshMs <= 0) {
-        forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
+    if (accessMs !== null && accessMs <= 0) {
+        refreshAccessToken(true).catch(() => {
+            forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
+        });
         return;
     }
 
-    // Đến hạn Refresh Token thì logout khỏi app, kể cả user không thao tác gì.
-    if (refreshMs !== null) {
-        refreshTokenTimer = setTimeout(() => {
-            forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
-        }, refreshMs);
-    }
-
-    // Gần hết Access Token thì tự refresh trước.
-    // Nếu refresh thất bại nghĩa là RT cũng không còn hợp lệ -> logout.
     if (accessMs !== null) {
         const refreshBeforeMs = Math.max(0, accessMs - 3000);
 
         accessTokenTimer = setTimeout(async () => {
             try {
-                await refreshAccessToken();
+                await refreshAccessToken(true);
             } catch (error) {
                 forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
             }
@@ -196,18 +183,11 @@ function bindAuthVisibilityEvents() {
     const checkSessionWhenBack = async () => {
         if (!state.username) return;
 
-        const refreshMs = millisUntil(state.refreshExpiresAt);
-
-        if (refreshMs !== null && refreshMs <= 0) {
-            forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
-            return;
-        }
-
         const accessMs = millisUntil(state.expiresAt);
 
         if (accessMs !== null && accessMs <= 0) {
             try {
-                await refreshAccessToken();
+                await refreshAccessToken(true);
             } catch (error) {
                 forceLogout("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "error");
             }
@@ -227,40 +207,8 @@ function startTokenExpirationWatcher() {
     scheduleAuthTimers();
 }
 
-// =====================
-// RESTORE SESSION
-// =====================
-
 async function restoreSessionFromCookie() {
-    const hasLocalSession =
-        state.username ||
-        localStorage.getItem("username") ||
-        localStorage.getItem("sessionId") ||
-        localStorage.getItem("refreshExpiresAt");
-
-    if (!hasLocalSession) {
-        clearStoredSession();
-        return false;
-    }
-
-    const currentRefreshExpiresAt =
-        state.refreshExpiresAt ||
-        localStorage.getItem("refreshExpiresAt");
-
-    const refreshMs = millisUntil(currentRefreshExpiresAt);
-
-    // Nếu frontend biết RT đã hết hạn thì không cần gọi API nữa.
-    if (refreshMs !== null && refreshMs <= 0) {
-        clearStoredSession();
-        return false;
-    }
-
     try {
-        /*
-         * Thử gọi /me bằng Access Token trước.
-         * Nếu AT hết hạn, apiRequest() sẽ tự gọi /api/auth/refresh,
-         * sau đó gọi lại /me.
-         */
         const data = await apiRequest("/api/auth/me", {
             method: "GET",
             suppressLogout: true
@@ -269,13 +217,8 @@ async function restoreSessionFromCookie() {
         saveLoginSession(data);
         return true;
     } catch (error) {
-        /*
-         * Fallback:
-         * Nếu /me lỗi, thử refresh trực tiếp.
-         * Trường hợp này xử lý khi AT đã hết hạn nhưng RT vẫn còn hợp lệ.
-         */
         try {
-            await refreshAccessToken();
+            await refreshAccessToken(true);
 
             const data = await apiRequest("/api/auth/me", {
                 method: "GET",
@@ -292,12 +235,6 @@ async function restoreSessionFromCookie() {
     }
 }
 
-// ==========
-// API COMMON
-// ==========
-
-// Gọi API dùng chung.
-// Nếu Access Token hết hạn, hàm này tự gọi /api/auth/refresh rồi gọi lại request cũ.
 async function apiRequest(url, options = {}) {
     return rawApiRequest(url, options);
 }
@@ -324,7 +261,7 @@ async function rawApiRequest(url, options = {}) {
 
         if (response.status === 401 && shouldTryRefresh(url, options)) {
             try {
-                await refreshAccessToken();
+                await refreshAccessToken(options.silent401 === true);
 
                 return await rawApiRequest(url, {
                     ...options,
@@ -360,7 +297,7 @@ function shouldTryRefresh(url, options = {}) {
     return true;
 }
 
-async function refreshAccessToken() {
+async function refreshAccessToken(silent = false) {
     if (refreshRequestPromise) {
         return refreshRequestPromise;
     }
@@ -376,6 +313,11 @@ async function refreshAccessToken() {
 
         if (!response.ok) {
             const message = getApiMessage(data, "Refresh Token đã hết hạn.");
+
+            if (!silent) {
+                showToast(message, "error");
+            }
+
             throw new Error(message);
         }
 
@@ -425,7 +367,6 @@ function isTextErrorMessage(message) {
 function clearStoredSession() {
     clearAuthTimers();
 
-    // Xóa cả token cũ nếu trình duyệt còn lưu từ phiên bản localStorage trước đây.
     localStorage.removeItem("token");
     localStorage.removeItem("username");
     localStorage.removeItem("role");
@@ -452,7 +393,7 @@ async function clearServerCookie() {
             headers: getDefaultHeaders()
         });
     } catch (error) {
-        // Nếu backend tạm thời không phản hồi, frontend vẫn xóa trạng thái cục bộ.
+        // Frontend vẫn xóa trạng thái cục bộ nếu backend không phản hồi.
     }
 }
 
@@ -482,8 +423,9 @@ function forceLogout(message = "Đã đăng xuất.", type = "success") {
     }, 500);
 }
 
-// Gán thông tin đăng nhập trả về từ backend vào state/localStorage.
 function saveLoginSession(data) {
+    if (!data) return;
+
     state.token = "";
     state.username = data.username || "";
     state.role = data.role || "";
@@ -503,8 +445,6 @@ function saveLoginSession(data) {
     scheduleAuthTimers();
 }
 
-// Giữ hàm này để tránh lỗi với code cũ.
-// Không dùng nữa vì JWT nằm trong HttpOnly cookie.
 function decodeJwtPayload(token) {
     try {
         const payload = token.split(".")[1];

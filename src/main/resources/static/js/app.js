@@ -1,6 +1,5 @@
 document.addEventListener("DOMContentLoaded", startApp);
 
-
 async function startApp() {
     await renderLoginView();
     bindLayoutEvents();
@@ -10,9 +9,11 @@ async function startApp() {
 
         if (restored) {
             await enterApplication();
-        } else {
-            showLoginView();
+            startTokenExpirationWatcher();
+            return;
         }
+
+        showLoginView();
     } catch (error) {
         clearStoredSession();
         showLoginView();
