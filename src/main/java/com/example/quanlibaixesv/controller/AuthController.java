@@ -547,8 +547,6 @@ public class AuthController {
             String sessionId = jwtService.extractSessionId(token);
             loginSessionService.deleteSession(sessionId);
         } catch (Exception ignored) {
-            // Token hết hạn hoặc không parse được thì bỏ qua.
-            // Frontend vẫn xóa localStorage, backend vẫn clear cookie.
         }
     }
 

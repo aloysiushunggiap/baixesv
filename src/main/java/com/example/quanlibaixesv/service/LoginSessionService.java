@@ -236,10 +236,7 @@ public class LoginSessionService {
                 .toList();
     }
 
-    /**
-     * Trước đây hàm này xóa dòng hết hạn khỏi DB.
-     * Bây giờ chỉ chuyển active = false để giữ lại lịch sử.
-     */
+
     @Scheduled(fixedRate = 60000)
     @Transactional
     public void cleanupExpiredSessions() {

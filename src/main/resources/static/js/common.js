@@ -84,7 +84,8 @@ async function loadHtml(url) {
     return response.text();
 }
 
-// Giữ hàm này để không làm hỏng code cũ. Frontend không đọc JWT nữa.
+// Giữ hàm này để không làm hỏng code cũ.
+// Frontend không đọc JWT nữa.
 function getToken() {
     return "";
 }
@@ -127,7 +128,10 @@ function parseServerDateTime(value) {
 
 function millisUntil(value) {
     const date = parseServerDateTime(value);
-    if (!date) return null;
+
+    if (!date) {
+        return null;
+    }
 
     return date.getTime() - Date.now();
 }
@@ -219,15 +223,74 @@ function bindAuthVisibilityEvents() {
     });
 }
 
-// Gọi sau khi load trang.
-// Nếu user đang còn session trong localStorage thì đặt lại timer.
-function initAuthStateWatcher() {
-    if (state.username && state.refreshExpiresAt) {
-        scheduleAuthTimers();
-    }
+function startTokenExpirationWatcher() {
+    scheduleAuthTimers();
 }
 
-document.addEventListener("DOMContentLoaded", initAuthStateWatcher);
+// =====================
+// RESTORE SESSION
+// =====================
+
+async function restoreSessionFromCookie() {
+    const hasLocalSession =
+        state.username ||
+        localStorage.getItem("username") ||
+        localStorage.getItem("sessionId") ||
+        localStorage.getItem("refreshExpiresAt");
+
+    if (!hasLocalSession) {
+        clearStoredSession();
+        return false;
+    }
+
+    const currentRefreshExpiresAt =
+        state.refreshExpiresAt ||
+        localStorage.getItem("refreshExpiresAt");
+
+    const refreshMs = millisUntil(currentRefreshExpiresAt);
+
+    // Nếu frontend biết RT đã hết hạn thì không cần gọi API nữa.
+    if (refreshMs !== null && refreshMs <= 0) {
+        clearStoredSession();
+        return false;
+    }
+
+    try {
+        /*
+         * Thử gọi /me bằng Access Token trước.
+         * Nếu AT hết hạn, apiRequest() sẽ tự gọi /api/auth/refresh,
+         * sau đó gọi lại /me.
+         */
+        const data = await apiRequest("/api/auth/me", {
+            method: "GET",
+            suppressLogout: true
+        });
+
+        saveLoginSession(data);
+        return true;
+    } catch (error) {
+        /*
+         * Fallback:
+         * Nếu /me lỗi, thử refresh trực tiếp.
+         * Trường hợp này xử lý khi AT đã hết hạn nhưng RT vẫn còn hợp lệ.
+         */
+        try {
+            await refreshAccessToken();
+
+            const data = await apiRequest("/api/auth/me", {
+                method: "GET",
+                skipRefresh: true,
+                suppressLogout: true
+            });
+
+            saveLoginSession(data);
+            return true;
+        } catch (refreshError) {
+            clearStoredSession();
+            return false;
+        }
+    }
+}
 
 // ==========
 // API COMMON
@@ -334,7 +397,13 @@ async function parseApiResponse(response) {
         return response.json();
     }
 
-    return response.text();
+    const text = await response.text();
+
+    if (!text) {
+        return null;
+    }
+
+    return text;
 }
 
 function getApiMessage(data, fallback) {
@@ -397,6 +466,7 @@ function forceLogout(message = "Đã đăng xuất.", type = "success") {
     clearStoredSession();
 
     const panelHost = document.getElementById("panelHost");
+
     if (panelHost) {
         panelHost.innerHTML = "";
     }
@@ -433,11 +503,15 @@ function saveLoginSession(data) {
     scheduleAuthTimers();
 }
 
-
+// Giữ hàm này để tránh lỗi với code cũ.
+// Không dùng nữa vì JWT nằm trong HttpOnly cookie.
 function decodeJwtPayload(token) {
     try {
         const payload = token.split(".")[1];
-        if (!payload) return {};
+
+        if (!payload) {
+            return {};
+        }
 
         const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
         const padded = base64.padEnd(
@@ -479,6 +553,7 @@ function setMessage(element, text, type) {
 
 function showToast(text, type = "") {
     const toast = document.getElementById("toast");
+
     if (!toast) return;
 
     toast.innerText = text;
@@ -512,16 +587,19 @@ async function withButtonLoading(button, loadingText, callback) {
 
 function formatTime(value) {
     if (!value) return "";
+
     return String(value).slice(0, 5);
 }
 
 function formatDateTime(value) {
     if (!value) return "";
+
     return String(value).replace("T", " ").slice(0, 16);
 }
 
 function formatMoney(amount) {
     const number = Number(amount || 0);
+
     return number.toLocaleString("vi-VN") + "đ";
 }
 
