@@ -8,19 +8,20 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 public class LoginResponseDto {
-    // Khi dùng cookie HttpOnly, Access Token không cần trả về frontend nữa.
-    // Giữ field này để không phá cấu trúc response cũ nếu test cũ còn đọc.
+    // Token không trả ra frontend nữa vì đã nằm trong HttpOnly Cookie.
+    // Giữ field này = null để không làm hỏng cấu trúc response cũ nếu frontend có đọc.
     private String token;
 
     private String username;
     private String role;
     private String sessionId;
 
-    // Thời điểm hết hạn Access Token hiện tại.
+    // Thời điểm Access Token hết hạn.
     private LocalDateTime expiresAt;
 
+    // Chỉ user sinh viên có cardId.
     private String cardId;
 
-    // Thời điểm hết hạn Refresh Token.
+    // Thời điểm Refresh Token hết hạn.
     private LocalDateTime refreshExpiresAt;
 }

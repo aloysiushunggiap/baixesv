@@ -21,7 +21,7 @@ public class SessionController {
         this.loginSessionService = loginSessionService;
     }
 
-    // Admin xem danh sách token/session còn hạn theo JWT exp.
+    // Admin xem danh sách token/session còn Refresh Token hợp lệ.
     @GetMapping("/active")
     public List<Map<String, Object>> getActiveSessions(Authentication authentication) {
         requireAdmin(authentication);

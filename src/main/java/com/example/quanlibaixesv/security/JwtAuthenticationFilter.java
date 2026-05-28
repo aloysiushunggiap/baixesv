@@ -45,20 +45,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();
+        String path = request.getRequestURI();
         String method = request.getMethod();
 
         if ("OPTIONS".equalsIgnoreCase(method)) {
             return true;
         }
 
-        // Không chạy JWT filter cho static file để cookie hết hạn không làm hỏng giao diện.
-        if (!path.startsWith("/api/")) {
-            return true;
-        }
-
-        // Các API public này phải dùng được kể cả browser đang có cookie cũ/hết hạn.
-        return path.equals("/api/auth/login")
+        // Không để Access Token hết hạn chặn mất refresh/logout.
+        return path.equals("/")
+                || path.equals("/index.html")
+                || path.equals("/favicon.ico")
+                || path.startsWith("/css/")
+                || path.startsWith("/js/")
+                || path.startsWith("/views/")
+                || path.startsWith("/images/")
+                || path.equals("/api/auth/login")
                 || path.equals("/api/auth/refresh")
                 || path.equals("/api/auth/logout")
                 || path.equals("/api/password-reset/request");
@@ -68,9 +70,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+
         String jwt = jwtCookieService.resolveAccessToken(request);
 
-        // Không có cookie/header token thì để Spring Security xử lý theo rule trong SecurityConfig.
+        // Request không có Access Token thì để Spring Security xử lý theo rule trong SecurityConfig.
         if (jwt == null || jwt.isBlank()) {
             filterChain.doFilter(request, response);
             return;
@@ -84,13 +87,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 long currentTokenVersion = findCurrentTokenVersion(username);
 
                 if (!jwtService.isTokenValid(jwt, userDetails, currentTokenVersion)) {
-                    throw new InvalidSessionException("Token không còn hợp lệ, vui lòng đăng nhập lại.");
+                    throw new InvalidSessionException("Access Token không còn hợp lệ.");
                 }
 
                 long tokenVersion = jwtService.extractTokenVersion(jwt);
                 String sessionId = jwtService.extractSessionId(jwt);
 
-                // JWT exp quyết định thời gian phiên. SessionId chỉ kiểm tra token có còn được quản lý/cho phép hay không.
+                // JWT exp quyết định Access Token còn hạn hay không.
+                // sessionId kiểm tra token còn thuộc một phiên đang được phép dùng hay không.
                 loginSessionService.validateSession(sessionId, username, tokenVersion);
 
                 UsernamePasswordAuthenticationToken authToken =
@@ -107,7 +111,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } catch (JwtException | IllegalArgumentException | UsernameNotFoundException | InvalidSessionException ex) {
             SecurityContextHolder.clearContext();
-            writeUnauthorizedResponse(response, "Token không hợp lệ, đã hết hạn hoặc phiên đăng nhập đã bị hủy.");
+            writeUnauthorizedResponse(response, "Access Token không hợp lệ hoặc đã hết hạn.");
         }
     }
 

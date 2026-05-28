@@ -50,7 +50,7 @@ public class JwtCookieService {
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .sameSite(cookieSameSite)
-                // Refresh Token chỉ cần gửi cho API auth để giảm phạm vi cookie.
+                // Refresh Token chỉ cần gửi cho nhóm API auth để giảm phạm vi cookie.
                 .path("/api/auth")
                 .maxAge(Duration.ofMillis(maxAgeMillis))
                 .build();

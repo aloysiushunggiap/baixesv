@@ -1,8 +1,10 @@
 package com.example.quanlibaixesv.repository;
 
 import com.example.quanlibaixesv.model.UserSession;
-import jakarta.transaction.Transactional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,14 +14,11 @@ public interface UserSessionRepository extends JpaRepository<UserSession, String
 
     Optional<UserSession> findByIdAndActiveTrue(String id);
 
-    Optional<UserSession> findByRefreshTokenHashAndActiveTrue(String refreshTokenHash);
-
-    // Một phiên còn hiệu lực nếu active=true và Refresh Token chưa hết hạn.
     List<UserSession> findByActiveTrueAndRefreshExpiresAtAfterOrderByRefreshExpiresAtAsc(LocalDateTime now);
 
-    @Transactional
     void deleteByRefreshExpiresAtBefore(LocalDateTime now);
 
-    @Transactional
-    void deleteByUsername(String username);
+    @Modifying
+    @Query("UPDATE UserSession s SET s.active = false WHERE s.username = :username AND s.active = true")
+    int deactivateAllByUsername(@Param("username") String username);
 }

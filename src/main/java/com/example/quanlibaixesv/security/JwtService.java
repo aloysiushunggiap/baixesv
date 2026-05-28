@@ -16,14 +16,20 @@ import java.util.Date;
 @Service
 public class JwtService {
 
+    private static final String CLAIM_ROLE = "role";
+    private static final String CLAIM_CARD_ID = "cardId";
+    private static final String CLAIM_TOKEN_VERSION = "ver";
+    private static final String CLAIM_SESSION_ID = "sid";
+    private static final String CLAIM_TOKEN_TYPE = "typ";
+    private static final String TOKEN_TYPE_ACCESS = "access";
+    private static final String TOKEN_TYPE_REFRESH = "refresh";
+
     @Value("${app.jwt.secret}")
     private String secret;
 
-    // Access Token sống ngắn. Đơn vị: milliseconds. Ví dụ 300000 = 5 phút.
     @Value("${app.jwt.expiration}")
     private long jwtExpiration;
 
-    // Refresh Token sống 10 phút theo yêu cầu.
     @Value("${app.jwt.refresh-expiration:600000}")
     private long refreshTokenExpiration;
 
@@ -43,8 +49,12 @@ public class JwtService {
         return new Date(System.currentTimeMillis() + jwtExpiration);
     }
 
+    public Date generateRefreshExpirationDate() {
+        return new Date(System.currentTimeMillis() + refreshTokenExpiration);
+    }
+
     public LocalDateTime generateRefreshExpirationDateTime() {
-        return LocalDateTime.now().plusNanos(refreshTokenExpiration * 1_000_000L);
+        return toLocalDateTime(generateRefreshExpirationDate());
     }
 
     public LocalDateTime toLocalDateTime(Date date) {
@@ -60,20 +70,35 @@ public class JwtService {
                                 String sessionId,
                                 Date expirationDate) {
         var builder = Jwts.builder()
-                .setId(sessionId) // jti = sessionId
                 .setSubject(userDetails.getUsername())
-                .claim("role", role)
-                .claim("ver", tokenVersion)
-                .claim("sid", sessionId)
+                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ACCESS)
+                .claim(CLAIM_ROLE, role)
+                .claim(CLAIM_TOKEN_VERSION, tokenVersion)
+                .claim(CLAIM_SESSION_ID, sessionId)
                 .setIssuedAt(new Date())
                 .setExpiration(expirationDate)
                 .signWith(getSignKey(), SignatureAlgorithm.HS256);
 
         if (cardId != null) {
-            builder.claim("cardId", cardId);
+            builder.claim(CLAIM_CARD_ID, cardId);
         }
 
         return builder.compact();
+    }
+
+    public String generateRefreshToken(String username,
+                                       long tokenVersion,
+                                       String sessionId,
+                                       Date expirationDate) {
+        return Jwts.builder()
+                .setSubject(username)
+                .claim(CLAIM_TOKEN_TYPE, TOKEN_TYPE_REFRESH)
+                .claim(CLAIM_TOKEN_VERSION, tokenVersion)
+                .claim(CLAIM_SESSION_ID, sessionId)
+                .setIssuedAt(new Date())
+                .setExpiration(expirationDate)
+                .signWith(getSignKey(), SignatureAlgorithm.HS256)
+                .compact();
     }
 
     public String extractUsername(String token) {
@@ -81,24 +106,19 @@ public class JwtService {
     }
 
     public String extractRole(String token) {
-        return extractAllClaims(token).get("role", String.class);
+        return extractAllClaims(token).get(CLAIM_ROLE, String.class);
     }
 
     public String extractCardId(String token) {
-        return extractAllClaims(token).get("cardId", String.class);
+        return extractAllClaims(token).get(CLAIM_CARD_ID, String.class);
     }
 
     public String extractSessionId(String token) {
-        Claims claims = extractAllClaims(token);
-        String sessionId = claims.get("sid", String.class);
-        if (sessionId == null || sessionId.isBlank()) {
-            sessionId = claims.getId();
-        }
-        return sessionId;
+        return extractAllClaims(token).get(CLAIM_SESSION_ID, String.class);
     }
 
     public long extractTokenVersion(String token) {
-        Object value = extractAllClaims(token).get("ver");
+        Object value = extractAllClaims(token).get(CLAIM_TOKEN_VERSION);
         if (value == null) {
             return -1L;
         }
@@ -112,11 +132,28 @@ public class JwtService {
         return extractAllClaims(token).getExpiration();
     }
 
+    public boolean isAccessToken(String token) {
+        return TOKEN_TYPE_ACCESS.equals(extractAllClaims(token).get(CLAIM_TOKEN_TYPE, String.class));
+    }
+
+    public boolean isRefreshToken(String token) {
+        return TOKEN_TYPE_REFRESH.equals(extractAllClaims(token).get(CLAIM_TOKEN_TYPE, String.class));
+    }
+
     public boolean isTokenValid(String token, UserDetails userDetails, long currentTokenVersion) {
         String username = extractUsername(token);
         long tokenVersion = extractTokenVersion(token);
         return username.equals(userDetails.getUsername())
                 && tokenVersion == currentTokenVersion
+                && isAccessToken(token)
+                && !isTokenExpired(token);
+    }
+
+    public boolean isRefreshTokenValid(String token, String username, long currentTokenVersion) {
+        long tokenVersion = extractTokenVersion(token);
+        return username.equals(extractUsername(token))
+                && tokenVersion == currentTokenVersion
+                && isRefreshToken(token)
                 && !isTokenExpired(token);
     }
 

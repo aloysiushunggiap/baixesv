@@ -14,6 +14,7 @@ import com.example.quanlibaixesv.security.JwtCookieService;
 import com.example.quanlibaixesv.security.JwtService;
 import com.example.quanlibaixesv.service.CardSignatureService;
 import com.example.quanlibaixesv.service.LoginSessionService;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -138,6 +139,7 @@ public class AuthController {
         student.setEnabled(true);
         student.setCardSecret(cardSignatureService.generateCardSecret());
         student.setTokenVersion(0L);
+
         studentRepo.save(student);
 
         return Map.of(
@@ -155,8 +157,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponseDto login(@RequestBody LoginRequestDto request,
-                                  HttpServletResponse response) {
+    public LoginResponseDto login(@RequestBody LoginRequestDto request, HttpServletResponse response) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getUsername(),
@@ -176,15 +177,28 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public LoginResponseDto refreshAccessToken(HttpServletRequest request,
-                                               HttpServletResponse response) {
+    public LoginResponseDto refreshAccessToken(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = jwtCookieService.resolveRefreshToken(request);
         if (refreshToken == null || refreshToken.isBlank()) {
+            jwtCookieService.addLogoutCookies(response);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không tìm thấy Refresh Token, vui lòng đăng nhập lại.");
         }
 
         try {
-            UserSession session = loginSessionService.validateRefreshToken(refreshToken);
+            if (!jwtService.isRefreshToken(refreshToken)) {
+                throw new InvalidSessionException("Token gửi lên không phải Refresh Token.");
+            }
+
+            String username = jwtService.extractUsername(refreshToken);
+            String sessionId = jwtService.extractSessionId(refreshToken);
+            long tokenVersion = jwtService.extractTokenVersion(refreshToken);
+
+            UserSession session = loginSessionService.validateRefreshSession(
+                    sessionId,
+                    username,
+                    tokenVersion,
+                    refreshToken
+            );
 
             AdminAccount admin = adminRepo.findByUsername(session.getUsername()).orElse(null);
             if (admin != null) {
@@ -192,13 +206,11 @@ public class AuthController {
                     loginSessionService.deleteSession(session.getId());
                     throw new InvalidSessionException("Tài khoản admin đang bị khóa.");
                 }
-
-                if (admin.getTokenVersion() != session.getTokenVersion()) {
+                if (admin.getTokenVersion() != tokenVersion) {
                     loginSessionService.deleteSession(session.getId());
                     throw new InvalidSessionException("Phiên đăng nhập đã bị hủy do đổi mật khẩu.");
                 }
-
-                return issueNewAccessTokenForAdmin(admin, session, response);
+                return issueNewTokensForAdmin(admin, session, response);
             }
 
             Student student = studentRepo.findByUsername(session.getUsername())
@@ -208,14 +220,13 @@ public class AuthController {
                 loginSessionService.deleteSession(session.getId());
                 throw new InvalidSessionException("Tài khoản user đang bị khóa.");
             }
-
-            if (student.getTokenVersion() != session.getTokenVersion()) {
+            if (student.getTokenVersion() != tokenVersion) {
                 loginSessionService.deleteSession(session.getId());
                 throw new InvalidSessionException("Phiên đăng nhập đã bị hủy do đổi mật khẩu.");
             }
 
-            return issueNewAccessTokenForStudent(student, session, response);
-        } catch (InvalidSessionException ex) {
+            return issueNewTokensForStudent(student, session, response);
+        } catch (JwtException | IllegalArgumentException | InvalidSessionException ex) {
             jwtCookieService.addLogoutCookies(response);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, ex.getMessage());
         }
@@ -243,20 +254,12 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Map<String, Object> logout(HttpServletRequest request,
-                                      HttpServletResponse response) {
+    public Map<String, Object> logout(HttpServletRequest request, HttpServletResponse response) {
         String accessToken = jwtCookieService.resolveAccessToken(request);
-        if (accessToken != null && !accessToken.isBlank()) {
-            try {
-                String sessionId = jwtService.extractSessionId(accessToken);
-                loginSessionService.deleteSession(sessionId);
-            } catch (Exception ignored) {
-                // Nếu access token đã hết hạn hoặc không parse được, thử xóa bằng refresh token bên dưới.
-            }
-        } else {
-            String refreshToken = jwtCookieService.resolveRefreshToken(request);
-            loginSessionService.deleteSessionByRefreshToken(refreshToken);
-        }
+        String refreshToken = jwtCookieService.resolveRefreshToken(request);
+
+        deleteSessionFromAnyToken(accessToken);
+        deleteSessionFromAnyToken(refreshToken);
 
         jwtCookieService.addLogoutCookies(response);
         return Map.of("message", "Đã đăng xuất.");
@@ -269,12 +272,30 @@ public class AuthController {
                 .authorities("ROLE_ADMIN")
                 .build();
 
+        String sessionId = loginSessionService.generateSessionId();
         Date accessExpirationDate = jwtService.generateExpirationDate();
+        Date refreshExpirationDate = jwtService.generateRefreshExpirationDate();
         LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
-        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
-        String refreshToken = loginSessionService.generateRefreshToken();
+        LocalDateTime refreshExpiresAt = jwtService.toLocalDateTime(refreshExpirationDate);
+
+        String accessToken = jwtService.generateToken(
+                userDetails,
+                "ROLE_ADMIN",
+                null,
+                admin.getTokenVersion(),
+                sessionId,
+                accessExpirationDate
+        );
+
+        String refreshToken = jwtService.generateRefreshToken(
+                admin.getUsername(),
+                admin.getTokenVersion(),
+                sessionId,
+                refreshExpirationDate
+        );
 
         UserSession session = loginSessionService.createSession(
+                sessionId,
                 admin.getUsername(),
                 "ROLE_ADMIN",
                 admin.getTokenVersion(),
@@ -282,15 +303,6 @@ public class AuthController {
                 accessExpiresAt,
                 refreshToken,
                 refreshExpiresAt
-        );
-
-        String accessToken = jwtService.generateToken(
-                userDetails,
-                "ROLE_ADMIN",
-                null,
-                admin.getTokenVersion(),
-                session.getId(),
-                accessExpirationDate
         );
 
         addAuthCookies(response, accessToken, refreshToken);
@@ -313,12 +325,30 @@ public class AuthController {
                 .authorities(student.getRole().name())
                 .build();
 
+        String sessionId = loginSessionService.generateSessionId();
         Date accessExpirationDate = jwtService.generateExpirationDate();
+        Date refreshExpirationDate = jwtService.generateRefreshExpirationDate();
         LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
-        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
-        String refreshToken = loginSessionService.generateRefreshToken();
+        LocalDateTime refreshExpiresAt = jwtService.toLocalDateTime(refreshExpirationDate);
+
+        String accessToken = jwtService.generateToken(
+                userDetails,
+                student.getRole().name(),
+                student.getCardId(),
+                student.getTokenVersion(),
+                sessionId,
+                accessExpirationDate
+        );
+
+        String refreshToken = jwtService.generateRefreshToken(
+                student.getUsername(),
+                student.getTokenVersion(),
+                sessionId,
+                refreshExpirationDate
+        );
 
         UserSession session = loginSessionService.createSession(
+                sessionId,
                 student.getUsername(),
                 student.getRole().name(),
                 student.getTokenVersion(),
@@ -326,15 +356,6 @@ public class AuthController {
                 accessExpiresAt,
                 refreshToken,
                 refreshExpiresAt
-        );
-
-        String accessToken = jwtService.generateToken(
-                userDetails,
-                student.getRole().name(),
-                student.getCardId(),
-                student.getTokenVersion(),
-                session.getId(),
-                accessExpirationDate
         );
 
         addAuthCookies(response, accessToken, refreshToken);
@@ -350,9 +371,7 @@ public class AuthController {
         );
     }
 
-    private LoginResponseDto issueNewAccessTokenForAdmin(AdminAccount admin,
-                                                         UserSession session,
-                                                         HttpServletResponse response) {
+    private LoginResponseDto issueNewTokensForAdmin(AdminAccount admin, UserSession session, HttpServletResponse response) {
         UserDetails userDetails = org.springframework.security.core.userdetails.User
                 .withUsername(admin.getUsername())
                 .password(admin.getPassword())
@@ -360,9 +379,25 @@ public class AuthController {
                 .build();
 
         Date accessExpirationDate = jwtService.generateExpirationDate();
+        Date refreshExpirationDate = jwtService.generateRefreshExpirationDate();
         LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
-        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
-        String newRefreshToken = loginSessionService.generateRefreshToken();
+        LocalDateTime refreshExpiresAt = jwtService.toLocalDateTime(refreshExpirationDate);
+
+        String newAccessToken = jwtService.generateToken(
+                userDetails,
+                "ROLE_ADMIN",
+                null,
+                admin.getTokenVersion(),
+                session.getId(),
+                accessExpirationDate
+        );
+
+        String newRefreshToken = jwtService.generateRefreshToken(
+                admin.getUsername(),
+                admin.getTokenVersion(),
+                session.getId(),
+                refreshExpirationDate
+        );
 
         UserSession updatedSession = loginSessionService.rotateRefreshToken(
                 session.getId(),
@@ -371,16 +406,7 @@ public class AuthController {
                 accessExpiresAt
         );
 
-        String accessToken = jwtService.generateToken(
-                userDetails,
-                "ROLE_ADMIN",
-                null,
-                admin.getTokenVersion(),
-                updatedSession.getId(),
-                accessExpirationDate
-        );
-
-        addAuthCookies(response, accessToken, newRefreshToken);
+        addAuthCookies(response, newAccessToken, newRefreshToken);
 
         return new LoginResponseDto(
                 null,
@@ -393,9 +419,7 @@ public class AuthController {
         );
     }
 
-    private LoginResponseDto issueNewAccessTokenForStudent(Student student,
-                                                           UserSession session,
-                                                           HttpServletResponse response) {
+    private LoginResponseDto issueNewTokensForStudent(Student student, UserSession session, HttpServletResponse response) {
         UserDetails userDetails = org.springframework.security.core.userdetails.User
                 .withUsername(student.getUsername())
                 .password(student.getPassword())
@@ -403,9 +427,25 @@ public class AuthController {
                 .build();
 
         Date accessExpirationDate = jwtService.generateExpirationDate();
+        Date refreshExpirationDate = jwtService.generateRefreshExpirationDate();
         LocalDateTime accessExpiresAt = jwtService.toLocalDateTime(accessExpirationDate);
-        LocalDateTime refreshExpiresAt = jwtService.generateRefreshExpirationDateTime();
-        String newRefreshToken = loginSessionService.generateRefreshToken();
+        LocalDateTime refreshExpiresAt = jwtService.toLocalDateTime(refreshExpirationDate);
+
+        String newAccessToken = jwtService.generateToken(
+                userDetails,
+                student.getRole().name(),
+                student.getCardId(),
+                student.getTokenVersion(),
+                session.getId(),
+                accessExpirationDate
+        );
+
+        String newRefreshToken = jwtService.generateRefreshToken(
+                student.getUsername(),
+                student.getTokenVersion(),
+                session.getId(),
+                refreshExpirationDate
+        );
 
         UserSession updatedSession = loginSessionService.rotateRefreshToken(
                 session.getId(),
@@ -414,16 +454,7 @@ public class AuthController {
                 accessExpiresAt
         );
 
-        String accessToken = jwtService.generateToken(
-                userDetails,
-                student.getRole().name(),
-                student.getCardId(),
-                student.getTokenVersion(),
-                updatedSession.getId(),
-                accessExpirationDate
-        );
-
-        addAuthCookies(response, accessToken, newRefreshToken);
+        addAuthCookies(response, newAccessToken, newRefreshToken);
 
         return new LoginResponseDto(
                 null,
@@ -439,6 +470,17 @@ public class AuthController {
     private void addAuthCookies(HttpServletResponse response, String accessToken, String refreshToken) {
         jwtCookieService.addAccessTokenCookie(response, accessToken, jwtService.getJwtExpirationMillis());
         jwtCookieService.addRefreshTokenCookie(response, refreshToken, jwtService.getRefreshTokenExpirationMillis());
+    }
+
+    private void deleteSessionFromAnyToken(String token) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+        try {
+            String sessionId = jwtService.extractSessionId(token);
+            loginSessionService.deleteSession(sessionId);
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean hasRole(Authentication authentication, String role) {

@@ -1,4 +1,4 @@
-// Nạp giao diện đăng nhập và gắn sự kiện cho form login/quên mật khẩu.
+// Nạp giao diện đăng nhập và gắn sự kiện submit cho form.
 async function renderLoginView() {
     const loginView = document.getElementById("loginView");
     loginView.innerHTML = await loadHtml("/views/login.html");
@@ -55,7 +55,6 @@ function showForgotPasswordForm() {
     }
 }
 
-// Xử lý đăng nhập: backend set Access Token + Refresh Token vào cookie HttpOnly.
 async function login(event) {
     event.preventDefault();
 
@@ -76,8 +75,8 @@ async function login(event) {
             const data = await apiRequest("/api/auth/login", {
                 method: "POST",
                 body: { username, password },
-                auth: false,
-                skipRefresh: true
+                skipRefresh: true,
+                suppressLogout: true
             });
 
             saveLoginSession(data);
@@ -91,7 +90,6 @@ async function login(event) {
     });
 }
 
-// Gửi yêu cầu quên mật khẩu để admin duyệt.
 async function sendForgotPasswordRequest(event) {
     event.preventDefault();
 
@@ -140,8 +138,8 @@ async function sendForgotPasswordRequest(event) {
         try {
             const data = await apiRequest("/api/password-reset/request", {
                 method: "POST",
-                auth: false,
                 skipRefresh: true,
+                suppressLogout: true,
                 body: { name, studentId, licensePlate, newPassword }
             });
 
@@ -161,41 +159,6 @@ function clearForgotPasswordForm() {
     }
 }
 
-function saveLoginSession(data) {
-    // Token nằm trong HttpOnly cookie, không lưu token vào localStorage.
-    state.token = "";
-    state.username = data.username || "";
-    state.role = data.role || "";
-    state.sessionId = data.sessionId || "";
-    state.expiresAt = data.expiresAt || "";
-    state.refreshExpiresAt = data.refreshExpiresAt || "";
-    state.cardId = data.cardId || "";
-
-    localStorage.removeItem("token");
-    localStorage.setItem("username", state.username);
-    localStorage.setItem("role", state.role);
-    localStorage.setItem("cardId", state.cardId);
-    localStorage.setItem("sessionId", state.sessionId);
-    localStorage.setItem("expiresAt", state.expiresAt);
-    localStorage.setItem("refreshExpiresAt", state.refreshExpiresAt);
-
-    startTokenExpirationWatcher();
-}
-
-async function restoreSessionFromCookie() {
-    try {
-        const data = await apiRequest("/api/auth/me", {
-            method: "GET",
-            silent401: true
-        });
-        saveLoginSession(data);
-        return true;
-    } catch (error) {
-        clearStoredSession();
-        return false;
-    }
-}
-
 async function logout(message = "Đã đăng xuất.", type = "success") {
     await clearServerCookie();
     clearStoredSession();
@@ -207,7 +170,7 @@ async function logout(message = "Đã đăng xuất.", type = "success") {
     showToast(message, type);
 }
 
+// Giữ hàm này để không làm hỏng code cũ. Không cần hydrate từ JWT nữa.
 function hydrateSessionFromToken() {
-    // Giữ lại hàm để không ảnh hưởng layout.js cũ.
-    // Phiên hiện tại được hydrate bằng /api/auth/me từ cookie HttpOnly.
+    return;
 }
