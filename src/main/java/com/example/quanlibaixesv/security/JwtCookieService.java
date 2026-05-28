@@ -50,7 +50,7 @@ public class JwtCookieService {
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .sameSite(cookieSameSite)
-                // Refresh Token chỉ cần gửi cho nhóm API auth để giảm phạm vi cookie.
+
                 .path("/api/auth")
                 .maxAge(Duration.ofMillis(maxAgeMillis))
                 .build();
@@ -85,7 +85,7 @@ public class JwtCookieService {
             return tokenFromCookie;
         }
 
-        // Fallback cho Postman: vẫn cho phép test bằng Authorization: Bearer <token>.
+
         return extractTokenFromAuthorizationHeader(request);
     }
 
